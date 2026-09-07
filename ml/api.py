@@ -1,14 +1,15 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Dict, Any
+from contextlib import asynccontextmanager
 
 # Ensure project root is in sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(PROJECT_ROOT))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import uvicorn
-import numpy as np
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -16,10 +17,26 @@ from pydantic import BaseModel, Field
 from src.inference.predict import SVMPredictor, InputValidationError, PredictorLoadError
 from src.features.feature_schema import FEATURE_ORDER
 
+# Global Predictor Instance
+predictor: Optional[SVMPredictor] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global predictor
+    try:
+        predictor = SVMPredictor()
+        print("✅ SVMPredictor initialized and model loaded successfully.")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not initialize SVMPredictor: {e}")
+    yield
+
+
 app = FastAPI(
     title="PhenoNode SVM ML Service",
     description="Machine Learning Inference Service for Multi-Sensor Phenotype Classification",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration
@@ -30,19 +47,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Global Predictor Instance
-predictor: Optional[SVMPredictor] = None
-
-
-@app.on_event("startup")
-def startup_event():
-    global predictor
-    try:
-        predictor = SVMPredictor()
-        print("✅ SVMPredictor initialized and model loaded successfully.")
-    except Exception as e:
-        print(f"⚠️ Warning: Could not initialize SVMPredictor: {e}")
 
 
 class PredictRequest(BaseModel):
@@ -142,5 +146,5 @@ def predict_endpoint(payload: PredictRequest):
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"🚀 Starting PhenoNode ML Server on http://0.0.0.0:{port}")
-    uvicorn.run("api:app", host="0.0.0.0", port=port, reload=True)
+    print(f"🚀 Starting PhenoNode ML Server on http://127.0.0.1:{port}")
+    uvicorn.run(app, host="127.0.0.1", port=port)
