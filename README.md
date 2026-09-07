@@ -1,5 +1,3 @@
-Siap. Maksudmu **satu file `.md` utuh**, bukan potongan-potongan penjelasan. Ini versi yang bisa langsung kamu copy ke:
-
 ```text
 C:\Users\Renaldi\phenotype-r\PROJECT_CONTEXT.md
 ```
