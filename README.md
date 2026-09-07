@@ -1,6 +1,6 @@
 # PHENOTYPE - Complete Project Context
 
-> This document is the single source of truth for developers and AI Agents working on the PHENOTYPE project.
+> This document is the Renaldi Simamora source of truth for developers working on the PHENOTYPE project.
 
 ## IMPORTANT
 
