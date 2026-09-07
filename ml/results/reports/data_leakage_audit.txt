@@ -1,0 +1,16 @@
+DATA LEAKAGE AUDIT
+==================================================
+[PASS] Subject IDs: train ∩ test = set()
+[PASS] Scaler: fitted only on training data (embedded in Pipeline)
+[PASS] Test data NOT used during GridSearchCV tuning
+[PASS] Test data NOT used for feature selection
+[PASS] Test data NOT used for threshold selection
+[PASS] Target column NOT included in feature matrix
+[PASS] Metadata columns excluded: ['subject_id', 'measurement_id', 'measurement_index']
+[PASS] Repeated subject measurements kept grouped (GroupShuffleSplit + StratifiedGroupKFold)
+
+Train subjects: 400
+Test  subjects: 100
+Subject overlap: set()
+
+AUDIT RESULT: PASSED

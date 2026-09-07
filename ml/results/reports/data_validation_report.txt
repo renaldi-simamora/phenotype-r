@@ -1,0 +1,33 @@
+============================================================
+DATA VALIDATION REPORT
+============================================================
+
+[1] Dataset shape: 2500 rows x 19 columns
+
+[2] Missing required columns: []
+    Extra columns: []
+
+[3] Non-numeric feature columns: {}
+
+[4] Missing values by column: {}
+
+[5] Infinite values by column: {}
+
+[6] Negative VL53L1X_Distance_mm values: 0
+
+[7] Duplicate rows: 0
+
+[8] Duplicate measurement IDs: 0
+
+[9] Duplicate (subject_id, measurement_index) combos: 0
+
+[10] Unique subjects: 500 (expected ~500)
+
+[11] Measurements per subject - min=5, max=5, mean=5.00
+
+[12] Class distribution: {'Class_A': 865, 'Class_C': 840, 'Class_B': 795}
+     Unknown classes: []
+
+============================================================
+OVERALL VALIDATION STATUS: PASSED [OK]
+============================================================

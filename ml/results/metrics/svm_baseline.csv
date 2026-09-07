@@ -1,0 +1,2 @@
+label,accuracy,precision_macro,recall_macro,f1_macro,f1_weighted
+SVM_baseline,0.778,0.751773422442492,0.7537320574162679,0.7525597905167066,0.7791178219184773

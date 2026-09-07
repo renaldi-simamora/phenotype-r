@@ -1,0 +1,66 @@
+{
+  "model_type": "sklearn Pipeline (StandardScaler + SVC)",
+  "feature_names": [
+    "AS7341_F1",
+    "AS7341_F2",
+    "AS7341_F3",
+    "AS7341_F4",
+    "AS7341_F5",
+    "AS7341_F6",
+    "AS7341_F7",
+    "AS7341_F8",
+    "AS7341_Clear",
+    "AS7341_NIR",
+    "TCS34725_R",
+    "TCS34725_G",
+    "TCS34725_B",
+    "TCS34725_Clear",
+    "VL53L1X_Distance_mm"
+  ],
+  "feature_order": [
+    "AS7341_F1",
+    "AS7341_F2",
+    "AS7341_F3",
+    "AS7341_F4",
+    "AS7341_F5",
+    "AS7341_F6",
+    "AS7341_F7",
+    "AS7341_F8",
+    "AS7341_Clear",
+    "AS7341_NIR",
+    "TCS34725_R",
+    "TCS34725_G",
+    "TCS34725_B",
+    "TCS34725_Clear",
+    "VL53L1X_Distance_mm"
+  ],
+  "n_features": 15,
+  "target_name": "characteristic_class",
+  "class_names": [
+    "Class_A",
+    "Class_B",
+    "Class_C"
+  ],
+  "best_hyperparameters": {
+    "classifier__C": "1",
+    "classifier__kernel": "linear"
+  },
+  "training_datetime": "2026-09-06T18:56:09.128122",
+  "dataset_identifier": "synthetic_final_cleaned.csv",
+  "dataset_note": "SYNTHETIC DATA ONLY \u2014 used for pipeline development and prototyping. Not real biological/phenotype measurements.",
+  "random_seed": 42,
+  "python_version": "3.14.2 (tags/v3.14.2:df79316, Dec  5 2025, 17:18:21) [MSC v.1944 64 bit (AMD64)]",
+  "sklearn_version": "1.9.0",
+  "final_test_metrics": {
+    "label": "SVM_final",
+    "accuracy": 0.8,
+    "precision_macro": 0.7821006602571527,
+    "recall_macro": 0.7893540669856458,
+    "f1_macro": 0.7840745545625003,
+    "f1_weighted": 0.8030332360266993
+  },
+  "cv_result": {
+    "cv_mean": 0.6980177908637187,
+    "cv_std": 0.04040463548741372
+  }
+}
