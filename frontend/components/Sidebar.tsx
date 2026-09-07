@@ -61,9 +61,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
 
       {/* Sidebar container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 border-r border-white/80 bg-white/80 backdrop-blur-2xl flex flex-col justify-between transition-transform duration-200 lg:translate-x-0 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 border-r border-white/80 bg-white/80 backdrop-blur-2xl flex flex-col justify-between transition-transform duration-200 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         {/* Header */}
         <div>
@@ -73,7 +72,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 <Cpu className="w-4 h-4" />
               </div>
               <span className="text-base tracking-tight font-bold text-slate-950">
-                PHENONODE.
+                PHENOTYPE.
               </span>
             </Link>
             {onCloseMobile && (
@@ -102,11 +101,10 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                         key={item.href}
                         href={item.href}
                         onClick={onCloseMobile}
-                        className={`flex items-center gap-3 px-3.5 py-2.5 rounded-full text-xs font-medium transition-all ${
-                          active
+                        className={`flex items-center gap-3 px-3.5 py-2.5 rounded-full text-xs font-medium transition-all ${active
                             ? 'bg-slate-950 text-white shadow-sm font-semibold'
                             : 'text-slate-600 hover:text-slate-950 hover:bg-white/70'
-                        }`}
+                          }`}
                       >
                         <Icon className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
                         <span>{item.label}</span>
@@ -127,7 +125,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
                 {user?.full_name || 'Subject'}
               </div>
               <div className="text-[10.5px] text-slate-400 truncate">
-                {user?.email || 'user@phenonode.edu'}
+                {user?.email || 'user@phenotype.edu'}
               </div>
             </div>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/80 uppercase">

@@ -60,7 +60,6 @@ export interface SensorPayload {
   as7341?: SpectralData;
   tcs34725?: ColorData;
   vl53l1x?: DistanceData;
-  bme280?: AmbientData;
 }
 
 export interface SensorReading {

@@ -18,7 +18,7 @@ export default function SettingsPage() {
 
   // Account form
   const [fullName, setFullName] = useState(user?.full_name || 'Subject');
-  const [email] = useState(user?.email || 'user@phenonode.edu');
+  const [email] = useState(user?.email || 'user@phenotype.edu');
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Measurement params
@@ -60,11 +60,10 @@ export default function SettingsPage() {
       <div className="glass-pill p-1.5 rounded-full border border-white/90 inline-flex flex-wrap gap-1 text-xs shadow-2xs">
         <button
           onClick={() => setActiveTab('account')}
-          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'account'
+          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'account'
               ? 'bg-slate-950 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-950'
-          }`}
+            }`}
         >
           <User className="w-3.5 h-3.5" />
           <span>Account</span>
@@ -72,11 +71,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('measurement')}
-          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'measurement'
+          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'measurement'
               ? 'bg-slate-950 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-950'
-          }`}
+            }`}
         >
           <Sliders className="w-3.5 h-3.5" />
           <span>Measurement</span>
@@ -84,11 +82,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('device')}
-          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'device'
+          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'device'
               ? 'bg-slate-950 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-950'
-          }`}
+            }`}
         >
           <HardDrive className="w-3.5 h-3.5" />
           <span>Device Node</span>
@@ -96,11 +93,10 @@ export default function SettingsPage() {
 
         <button
           onClick={() => setActiveTab('model')}
-          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'model'
+          className={`px-4 py-2 rounded-full font-semibold transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'model'
               ? 'bg-slate-950 text-white shadow-xs'
               : 'text-slate-600 hover:text-slate-950'
-          }`}
+            }`}
         >
           <Binary className="w-3.5 h-3.5" />
           <span>Model Info</span>

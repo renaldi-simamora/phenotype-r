@@ -2,18 +2,37 @@ import { ApiResponse, User, Device, Measurement, MlPrediction, MlModel, SensorRe
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+export const AUTH_STORAGE_KEYS = ['phenotype_token', 'phenonode_token'] as const;
+
+type UnauthorizedListener = () => void;
+let unauthorizedListener: UnauthorizedListener | null = null;
+
+export const setOnUnauthorized = (listener: UnauthorizedListener | null) => {
+  unauthorizedListener = listener;
+};
+
 class ApiClient {
   private getToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('phenonode_token');
+    try {
+      return localStorage.getItem('phenotype_token') || localStorage.getItem('phenonode_token');
+    } catch {
+      return null;
+    }
   }
 
   setToken(token: string | null) {
     if (typeof window === 'undefined') return;
-    if (token) {
-      localStorage.setItem('phenonode_token', token);
-    } else {
-      localStorage.removeItem('phenonode_token');
+    try {
+      if (token) {
+        localStorage.setItem('phenotype_token', token);
+        localStorage.setItem('phenonode_token', token);
+      } else {
+        localStorage.removeItem('phenotype_token');
+        localStorage.removeItem('phenonode_token');
+      }
+    } catch {
+      // Storage access may fail in restricted sandboxes
     }
   }
 
@@ -24,8 +43,8 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (token && token.trim().length > 0) {
+      headers['Authorization'] = `Bearer ${token.trim()}`;
     }
 
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
@@ -37,7 +56,22 @@ class ApiClient {
         headers,
       });
 
-      const json: ApiResponse<T> = await res.json();
+      // Centralized 401 Unauthorized handler
+      if (res.status === 401) {
+        this.setToken(null);
+        if (unauthorizedListener) {
+          unauthorizedListener();
+        } else if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('phenotype:auth:401'));
+        }
+        throw new Error('Unauthorized session expired. Redirecting to home.');
+      }
+
+      const json: ApiResponse<T> = await res.json().catch(() => ({
+        success: false,
+        message: `HTTP error ${res.status}`,
+        data: null as unknown as T,
+      }));
 
       if (!res.ok) {
         throw new Error(json.message || `Request failed with status ${res.status}`);

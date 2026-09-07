@@ -123,7 +123,6 @@ export default function MeasurementPage() {
               as7341: { f1: 1240, f2: 1460, f3: 1680, f4: 1890, f5: 1420, f6: 1200, f7: 980, f8: 760, clear: 2100, nir: 850 },
               tcs34725: { red: 185, green: 142, blue: 122, clear: 210 },
               vl53l1x: { distance_mm: 38.2 },
-              bme280: { ambient_temperature_c: 26.4, humidity_percent: 61.2, pressure_hpa: 1008.2 },
             },
           };
 

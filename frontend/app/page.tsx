@@ -13,6 +13,7 @@ import {
   Binary,
   Sparkles,
   Zap,
+  Layers,
   ArrowRight,
   ShieldCheck,
   Activity,
@@ -240,7 +241,7 @@ export default function LandingPage() {
               <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center">
                 <CheckCircle2 className="w-3.5 h-3.5" />
               </div>
-              <div className="font-bold text-slate-900">94.2% Model Accuracy</div>
+              <div className="font-bold text-slate-900">80.0% Model Accuracy</div>
             </div>
           </div>
         </div>
@@ -306,11 +307,11 @@ export default function LandingPage() {
             {/* Tech 5 */}
             <div className="p-7 rounded-3xl glass-panel border border-white/85 shadow-sm space-y-3 hover:shadow-md transition-shadow">
               <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                <Zap className="w-5 h-5" />
+                <Layers className="w-5 h-5" />
               </div>
-              <h3 className="text-base font-bold text-slate-950">BME280 Environment</h3>
+              <h3 className="text-base font-bold text-slate-950">15-Feature Fusion</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                Monitors ambient temperature, relative humidity, and barometric pressure as environmental control variables during sampling.
+                Canonical 15-dimensional feature vector combining 10 spectral channels, 4 chromatic coordinates, and 1 laser distance reading.
               </p>
             </div>
 

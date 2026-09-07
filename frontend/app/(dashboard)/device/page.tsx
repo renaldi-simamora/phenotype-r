@@ -134,7 +134,7 @@ export default function DevicePage() {
                 <Wifi className="w-3.5 h-3.5 text-cyan-600" />
                 <span>Wi-Fi Network</span>
               </div>
-              <div className="text-slate-950 font-bold">PHENONODE-IoT</div>
+              <div className="text-slate-950 font-bold">PHENOTYPE-IoT</div>
               <div className="text-[10px] text-slate-500">RSSI -54 dBm (Strong)</div>
             </div>
 
@@ -247,28 +247,6 @@ export default function DevicePage() {
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-2.5">
               <span>Current readout: 38.2 mm</span>
               <span>Timing budget: 50ms</span>
-            </div>
-          </div>
-
-          {/* Sensor 4 */}
-          <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                  <Zap className="w-3.5 h-3.5" />
-                </div>
-                <span className="font-bold text-slate-950">BME280 Ambient Sensor</span>
-              </div>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                OPERATIONAL
-              </span>
-            </div>
-            <p className="text-slate-500 text-[11px] leading-relaxed">
-              Environmental control variable measurement on I2C address 0x76. Temperature, humidity, barometric pressure.
-            </p>
-            <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-2.5">
-              <span>26.4°C · 61.2% RH · 1008.2 hPa</span>
-              <span>Sampling: 1 Hz</span>
             </div>
           </div>
         </div>

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { User } from '../types';
-import { api } from '../lib/api';
+import { api, setOnUnauthorized, AUTH_STORAGE_KEYS } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
 
@@ -12,7 +12,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (token: string, user: User) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
 }
@@ -25,57 +25,102 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  const refreshUser = async () => {
+  // Helper to read any saved auth token
+  const getStoredToken = useCallback((): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      for (const key of AUTH_STORAGE_KEYS) {
+        const val = localStorage.getItem(key);
+        if (val && val.trim().length > 0) return val.trim();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Centralized logout function - cleans state, tokens, and redirects to landing page '/'
+  const logout = useCallback(async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore Supabase sign out network/session errors
+    }
+
+    // Clean all authentication storage keys
+    if (typeof window !== 'undefined') {
+      try {
+        AUTH_STORAGE_KEYS.forEach((key) => {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        });
+      } catch {
+        // Handle storage access errors in strict sandboxes
+      }
+    }
+
+    api.setToken(null);
+    setToken(null);
+    setUser(null);
+
+    // Final destination for any unauthenticated state: Landing Page '/'
+    if (typeof window !== 'undefined') {
+      // Use router replace to avoid pushing back button loop
+      router.replace('/');
+    }
+  }, [router]);
+
+  const refreshUser = useCallback(async () => {
     try {
       const res = await api.auth.getMe();
       if (res.success && res.data) {
         setUser(res.data);
       }
     } catch {
-      api.setToken(null);
-      setToken(null);
-      setUser(null);
+      await logout();
     }
-  };
+  }, [logout]);
 
+  // Initial Auth Check
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       // 1. Check local storage token
-      const storedToken = localStorage.getItem('phenonode_token');
+      const storedToken = getStoredToken();
       if (storedToken) {
         api.setToken(storedToken);
-        setToken(storedToken);
+        if (isMounted) setToken(storedToken);
         try {
           const res = await api.auth.getMe();
-          if (res.success && res.data) {
+          if (isMounted && res.success && res.data) {
             setUser(res.data);
             setIsLoading(false);
             return;
           }
         } catch {
-          // Token expired or invalid
-          localStorage.removeItem('phenonode_token');
-          api.setToken(null);
-          setToken(null);
-          setUser(null);
+          // Token is invalid or expired
+          if (isMounted) {
+            api.setToken(null);
+            setToken(null);
+            setUser(null);
+          }
         }
       }
 
-      // 2. Check Supabase session (e.g. from Google OAuth redirect)
+      // 2. Check Supabase session (e.g. Google OAuth redirect)
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
           const supaToken = session.access_token;
           api.setToken(supaToken);
-          setToken(supaToken);
+          if (isMounted) setToken(supaToken);
 
-          // Attempt to get backend profile or construct from session
           try {
             const res = await api.auth.getMe();
-            if (res.success && res.data) {
+            if (isMounted && res.success && res.data) {
               setUser(res.data);
-            } else {
-              // Fallback user from OAuth metadata
+            } else if (isMounted) {
               const oauthUser: User = {
                 id: session.user.id,
                 auth_user_id: session.user.id,
@@ -88,29 +133,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(oauthUser);
             }
           } catch {
-            const oauthUser: User = {
-              id: session.user.id,
-              auth_user_id: session.user.id,
-              email: session.user.email || '',
-              full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Researcher',
-              role: 'USER',
-              status: 'ACTIVE',
-              created_at: session.user.created_at,
-            };
-            setUser(oauthUser);
+            if (isMounted) {
+              const oauthUser: User = {
+                id: session.user.id,
+                auth_user_id: session.user.id,
+                email: session.user.email || '',
+                full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Researcher',
+                role: 'USER',
+                status: 'ACTIVE',
+                created_at: session.user.created_at,
+              };
+              setUser(oauthUser);
+            }
           }
         }
       } catch {
         // No active supabase session
       }
 
-      setIsLoading(false);
+      if (isMounted) {
+        setIsLoading(false);
+      }
     };
 
     initAuth();
 
-    // Listen to Supabase auth changes
+    // Supabase auth state change listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!isMounted) return;
       if (event === 'SIGNED_IN' && session?.access_token) {
         api.setToken(session.access_token);
         setToken(session.access_token);
@@ -141,35 +191,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
         }
       } else if (event === 'SIGNED_OUT') {
-        api.setToken(null);
-        setToken(null);
-        setUser(null);
+        logout();
       }
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
-  }, []);
+  }, [getStoredToken, logout]);
+
+  // Connect Centralized 401 callback from API Client
+  useEffect(() => {
+    setOnUnauthorized(() => {
+      logout();
+    });
+
+    const handleCustom401 = () => {
+      logout();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('phenotype:auth:401', handleCustom401);
+    }
+
+    return () => {
+      setOnUnauthorized(null);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('phenotype:auth:401', handleCustom401);
+      }
+    };
+  }, [logout]);
+
+  // Active validation: Multi-tab storage event + DevTools same-tab token deletion listener
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Multi-tab storage event: Detects when token is deleted or cleared in another tab
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key && AUTH_STORAGE_KEYS.includes(e.key as (typeof AUTH_STORAGE_KEYS)[number])) {
+        if (!e.newValue) {
+          logout();
+        }
+      } else if (e.key === null) {
+        // Storage was cleared completely
+        logout();
+      }
+    };
+
+    // Active same-tab check: Check token presence on focus, visibility change, and gentle 1s interval
+    const checkActiveToken = () => {
+      if (token && user) {
+        const currentStored = getStoredToken();
+        if (!currentStored) {
+          logout();
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', checkActiveToken);
+    document.addEventListener('visibilitychange', checkActiveToken);
+
+    // Heartbeat interval while user is authenticated (1000ms)
+    const interval = setInterval(checkActiveToken, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', checkActiveToken);
+      document.removeEventListener('visibilitychange', checkActiveToken);
+      clearInterval(interval);
+    };
+  }, [token, user, getStoredToken, logout]);
 
   const login = (newToken: string, newUser: User) => {
-    localStorage.setItem('phenonode_token', newToken);
     api.setToken(newToken);
     setToken(newToken);
     setUser(newUser);
-  };
-
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore
-    }
-    localStorage.removeItem('phenonode_token');
-    api.setToken(null);
-    setToken(null);
-    setUser(null);
-    router.push('/login');
   };
 
   const signInWithGoogle = async () => {
