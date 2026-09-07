@@ -2,7 +2,51 @@ import { ApiResponse, User, Device, Measurement, MlPrediction, MlModel, SensorRe
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
+export const PRIMARY_AUTH_KEY = 'phenotype_token' as const;
 export const AUTH_STORAGE_KEYS = ['phenotype_token', 'phenonode_token'] as const;
+
+/**
+ * Checks if a JWT token is expired or malformed client-side without a network call.
+ * Returns true if definitely expired, false if active or valid.
+ */
+export function isTokenExpired(token: string | null): boolean {
+  if (!token || typeof token !== 'string') return true;
+  try {
+    const trimmed = token.trim();
+    if (!trimmed) return true;
+    const parts = trimmed.split('.');
+    if (parts.length !== 3) {
+      return false; // Not standard JWT, don't falsely expire
+    }
+    const base64Url = parts[1];
+    let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    const binary = atob(base64);
+    try {
+      const jsonPayload = decodeURIComponent(
+        binary
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const decoded = JSON.parse(jsonPayload);
+      if (typeof decoded.exp === 'number') {
+        return Date.now() >= decoded.exp * 1000;
+      }
+      return false;
+    } catch {
+      const decoded = JSON.parse(binary);
+      if (typeof decoded.exp === 'number') {
+        return Date.now() >= decoded.exp * 1000;
+      }
+      return false;
+    }
+  } catch {
+    return false;
+  }
+}
 
 type UnauthorizedListener = () => void;
 let unauthorizedListener: UnauthorizedListener | null = null;
@@ -12,10 +56,34 @@ export const setOnUnauthorized = (listener: UnauthorizedListener | null) => {
 };
 
 class ApiClient {
-  private getToken(): string | null {
+  getToken(): string | null {
     if (typeof window === 'undefined') return null;
     try {
-      return localStorage.getItem('phenotype_token') || localStorage.getItem('phenonode_token');
+      const token = localStorage.getItem(PRIMARY_AUTH_KEY) || localStorage.getItem('phenonode_token');
+      if (token && token.trim().length > 0) {
+        if (isTokenExpired(token.trim())) {
+          this.setToken(null);
+          return null;
+        }
+        return token.trim();
+      }
+
+      // Fallback: Check Supabase session token in localStorage
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(key) || '');
+            if (parsed?.access_token && !isTokenExpired(parsed.access_token)) {
+              return parsed.access_token;
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+      }
+
+      return null;
     } catch {
       return null;
     }
@@ -24,11 +92,10 @@ class ApiClient {
   setToken(token: string | null) {
     if (typeof window === 'undefined') return;
     try {
-      if (token) {
-        localStorage.setItem('phenotype_token', token);
-        localStorage.setItem('phenonode_token', token);
+      if (token && token.trim().length > 0) {
+        localStorage.setItem(PRIMARY_AUTH_KEY, token.trim());
       } else {
-        localStorage.removeItem('phenotype_token');
+        localStorage.removeItem(PRIMARY_AUTH_KEY);
         localStorage.removeItem('phenonode_token');
       }
     } catch {
@@ -58,13 +125,20 @@ class ApiClient {
 
       // Centralized 401 Unauthorized handler
       if (res.status === 401) {
-        this.setToken(null);
-        if (unauthorizedListener) {
-          unauthorizedListener();
-        } else if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('phenotype:auth:401'));
+        const isAuthEndpoint = cleanEndpoint.includes('/auth/login') || cleanEndpoint.includes('/auth/register');
+        if (!isAuthEndpoint) {
+          this.setToken(null);
+          if (unauthorizedListener) {
+            unauthorizedListener();
+          } else if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('phenotype:auth:401'));
+          }
         }
-        throw new Error('Unauthorized session expired. Redirecting to home.');
+        const json = await res.json().catch(() => ({
+          success: false,
+          message: isAuthEndpoint ? 'Invalid credentials' : 'Unauthorized session expired. Redirecting to home.',
+        }));
+        throw new Error(json.message || (isAuthEndpoint ? 'Invalid credentials' : 'Unauthorized session expired. Redirecting to home.'));
       }
 
       const json: ApiResponse<T> = await res.json().catch(() => ({

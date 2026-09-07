@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Sidebar } from '../../components/Sidebar';
 import { Topbar } from '../../components/Topbar';
 import { Cpu } from 'lucide-react';
-import { AUTH_STORAGE_KEYS } from '../../lib/api';
+import { PRIMARY_AUTH_KEY, isTokenExpired } from '../../lib/api';
 
 export default function DashboardLayout({
   children,
@@ -17,35 +17,75 @@ export default function DashboardLayout({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Protected Route Guard: If not authenticated, redirect immediately to landing page '/'
+  // Protected Route Guard: If unauthenticated, redirect immediately to landing page '/'
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.replace('/');
-    }
-  }, [isAuthenticated, isLoading, router]);
-
-  // Handle Browser Back Button (bfcache / pageshow) & instant active validation
-  useEffect(() => {
-    const handlePageShow = (event: PageTransitionEvent) => {
-      // If page was restored from bfcache or back navigation
-      const hasValidToken = AUTH_STORAGE_KEYS.some((key) => {
-        try {
-          const val = localStorage.getItem(key);
-          return val && val.trim().length > 0;
-        } catch {
-          return false;
-        }
-      });
-
-      if (!hasValidToken || !isAuthenticated) {
-        logout();
+      logout();
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
         router.replace('/');
+      }
+    }
+  }, [isAuthenticated, isLoading, logout, router]);
+
+  // Active validation in protected layout: Browser Back/Forward (popstate/pageshow) & DevTools token deletion
+  useEffect(() => {
+    const hasActiveToken = (): boolean => {
+      try {
+        const primary = localStorage.getItem(PRIMARY_AUTH_KEY);
+        if (primary && primary.trim().length > 0 && !isTokenExpired(primary)) return true;
+        const fallback = localStorage.getItem('phenonode_token');
+        if (fallback && fallback.trim().length > 0 && !isTokenExpired(fallback)) return true;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
+            try {
+              const parsed = JSON.parse(localStorage.getItem(key) || '');
+              if (parsed?.access_token && !isTokenExpired(parsed.access_token)) return true;
+            } catch {
+              // ignore
+            }
+          }
+        }
+        return false;
+      } catch {
+        return false;
       }
     };
 
+    const verifyProtectedAccess = () => {
+      if (!isLoading && !hasActiveToken()) {
+        logout();
+        if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+          router.replace('/');
+        }
+      }
+    };
+
+    // Immediate check once initialized
+    if (!isLoading) {
+      verifyProtectedAccess();
+    }
+
+    // Heartbeat interval inside protected route layout
+    const interval = setInterval(verifyProtectedAccess, 500);
+
+    const handlePageShow = () => {
+      verifyProtectedAccess();
+    };
+
+    const handlePopState = () => {
+      verifyProtectedAccess();
+    };
+
     window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, [isAuthenticated, logout, router]);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isLoading, logout, router]);
 
   // Loading Screen: Avoid flash of dashboard content while checking authentication
   if (isLoading) {
