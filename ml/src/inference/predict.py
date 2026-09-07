@@ -13,9 +13,16 @@ Designed for easy integration with:
   - Web dashboard API calls
 """
 
+import os
+import sys
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+
+# Ensure project root is in sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import numpy as np
 import pandas as pd
