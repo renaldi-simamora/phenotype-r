@@ -1,58 +1,98 @@
-```text
-C:\Users\Renaldi\phenotype-r\PROJECT_CONTEXT.md
-```
-
-````md
 # PHENOTYPE - Complete Project Context
 
 > This document is the single source of truth for developers and AI Agents working on the PHENOTYPE project.
->
-> IMPORTANT:
-> - The correct project name is **PHENOTYPE**.
-> - NEVER call this project PHENONODE.
-> - This project consists of a Next.js frontend, Express.js backend, Python SVM ML service, and Supabase PostgreSQL database.
-> - Before modifying any code, inspect the existing implementation and understand the current architecture.
-> - Do not redesign the existing UI unless explicitly requested.
-> - Do not change the ML methodology/model unless explicitly requested.
-> - Do not replace Express.js with FastAPI.
-> - Do not create duplicate authentication systems.
-> - Do not invent API endpoints, database fields, ML metrics, or system behavior.
+
+## IMPORTANT
+
+- The correct project name is **PHENOTYPE**.
+- NEVER call the project PHENONODE.
+- PHENOTYPE is an IoT-based multi-sensor system designed to collect, process, store, and analyze multi-sensor measurements for the identification and analysis of predefined phenotype-related characteristics within the scope of this research.
+- The system consists of:
+  - ESP32-S3 IoT device
+  - AS7341 spectral sensor
+  - TCS34725 RGB/color sensor
+  - VL53L1X distance sensor
+  - Express.js + TypeScript backend
+  - Supabase database
+  - Python-based Support Vector Machine (SVM) service
+  - Next.js frontend
+- The project is developed for academic research, final project/thesis implementation, IoT experimentation, and machine learning experimentation.
+- Before modifying the code, AI Agents MUST inspect the existing implementation and understand the current architecture.
+- Do not rewrite or replace existing architecture unless explicitly requested.
+- Do not replace Express.js with FastAPI.
+- Do not replace the existing SVM model or ML pipeline unless explicitly requested.
+- Do not invent API endpoints, database fields, sensor features, ML metrics, or system behavior.
 
 ---
 
 # 1. PROJECT IDENTITY
 
-Project name:
+## Project Name
 
 **PHENOTYPE**
 
-PHENOTYPE is an IoT-based multi-sensor research platform for collecting sensor measurements, storing measurement data, processing the data through a machine learning service, and presenting measurement and analytical results through a web dashboard.
+## Project Description
+
+PHENOTYPE is an IoT-based multi-sensor measurement and analysis platform that combines spectral, color, and distance measurements to support the identification of predefined phenotype-related characteristics.
+
+The system collects measurements from multiple sensors using an ESP32-S3. The collected sensor data is transmitted through Wi-Fi to the backend, stored in Supabase, and processed using a Python-based Support Vector Machine (SVM) model.
+
+The resulting classification is displayed through a web-based dashboard.
+
+## Research Objective
+
+The main objective of PHENOTYPE is to:
+
+1. Acquire multi-sensor measurement data using an IoT device.
+2. Combine measurements from different sensor types.
+3. Store and manage measurement data through a backend and database.
+4. Process sensor features using a machine learning model.
+5. Use Support Vector Machine (SVM) for classification of predefined research classes.
+6. Display measurement, classification, and analytical results through a web dashboard.
+7. Evaluate the performance of multi-sensor data fusion for the classification task.
+
+## Research Scope
 
 The system is intended for:
 
-- research
 - academic final project / thesis
-- prototype demonstration
-- IoT experimentation
-- multi-sensor data acquisition
+- IoT multi-sensor experimentation
 - machine learning experimentation
+- multi-sensor data acquisition
+- sensor data analysis
+- classification experimentation
 - measurement history and analytics
+- prototype demonstration
 
-The system must avoid unsupported biological, medical, racial, ethnic, or identity-related claims.
+The system does **not** claim to determine a person's identity, ethnicity, race, medical condition, or other personal attributes unless such claims are explicitly supported by an appropriate scientific ground truth and research methodology.
 
-If experimental labels are used, such as:
+The term **phenotype-related characteristics** in this project refers to characteristics that are explicitly defined and measured within the research methodology.
+
+## Research Classes
+
+The SVM model uses predefined research classes as its classification target.
+
+Example:
 
 ```text
 Class_A
 Class_B
 Class_C
-````
 
-they must be treated as research labels unless scientifically validated ground truth exists.
+These labels represent research-defined target classes in the dataset.
 
-Do not invent biological meaning for these labels.
+They must not be automatically interpreted as:
 
----
+biological races
+ethnic groups
+medical conditions
+personal identities
+genetic categories
+other biological attributes
+
+The meaning of each class must be explicitly defined by the research methodology and supported by the actual ground-truth data used for the experiment.
+
+AI Agents MUST NOT invent or infer the meaning of Class_A, Class_B, or Class_C.
 
 # 2. HIGH-LEVEL SYSTEM ARCHITECTURE
 
