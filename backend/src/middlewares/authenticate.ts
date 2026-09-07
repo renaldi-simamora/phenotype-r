@@ -28,15 +28,32 @@ export async function authenticate(
     }
 
     // Fetch role from profiles table (service role bypasses RLS)
-    const { data: profile, error: profileError } = await supabaseAdmin
+    let { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('id, auth_user_id, full_name, email, role, status')
       .eq('auth_user_id', data.user.id)
-      .single();
+      .maybeSingle();
 
-    if (profileError || !profile) {
-      logger.warn('Profile not found for auth user', { userId: data.user.id });
-      return next(Err.unauthorized('User profile not found'));
+    if (!profile) {
+      // Auto-create profile for OAuth or newly confirmed users
+      const newProfile = {
+        auth_user_id: data.user.id,
+        full_name: data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'Researcher',
+        email: data.user.email || '',
+        role: 'USER',
+        status: 'ACTIVE',
+      };
+      const { data: created, error: insertError } = await supabaseAdmin
+        .from('profiles')
+        .insert(newProfile)
+        .select('id, auth_user_id, full_name, email, role, status')
+        .single();
+
+      if (insertError || !created) {
+        logger.warn('Failed to auto-create profile for auth user', { userId: data.user.id, error: insertError });
+        return next(Err.unauthorized('User profile not found'));
+      }
+      profile = created;
     }
 
     if (profile.status === 'INACTIVE') {
