@@ -12,6 +12,12 @@ export interface PredictResponsePayload {
   measurement_id: string;
   prediction: string;
   confidence: number;
+  probabilities?: {
+    Class_A?: number;
+    Class_B?: number;
+    Class_C?: number;
+    [key: string]: number | undefined;
+  };
   model_version: string;
 }
 

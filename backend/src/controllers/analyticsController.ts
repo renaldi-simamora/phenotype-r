@@ -22,6 +22,15 @@ export class AnalyticsController {
     }
   }
 
+  static async getDataSourcesStats(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const stats = await AnalyticsService.getDataSourceStats();
+      sendSuccess(res, 'Data sources analytics fetched', stats);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getDevicesStats(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
     try {
       const stats = await AnalyticsService.getDeviceStats();

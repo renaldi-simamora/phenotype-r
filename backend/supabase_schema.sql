@@ -31,13 +31,43 @@ CREATE TABLE IF NOT EXISTS public.measurements (
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   operator_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   device_id UUID REFERENCES public.devices(id) ON DELETE CASCADE,
+  sample_count INT DEFAULT 20,
+  quality TEXT CHECK (quality IN ('GOOD', 'WARNING', 'POOR')) DEFAULT 'GOOD',
+  data_source TEXT CHECK (data_source IN ('synthetic', 'iot_real')) DEFAULT 'synthetic',
+  prediction_id UUID,
+  features_summary JSONB,
   status TEXT CHECK (status IN ('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ML_PROCESSING_FAILED')) DEFAULT 'PENDING',
   started_at TIMESTAMPTZ,
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. Sensor Readings Table (Multi-Sensor Ingestion)
+-- 4. Raw Sensor Samples Table (1 Measurement = 20 Samples, 15 Raw Features Each)
+CREATE TABLE IF NOT EXISTS public.raw_samples (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  measurement_id UUID REFERENCES public.measurements(id) ON DELETE CASCADE,
+  sample_number INT NOT NULL CHECK (sample_number >= 1 AND sample_number <= 20),
+  timestamp TIMESTAMPTZ DEFAULT now(),
+  as7341_f1 DOUBLE PRECISION NOT NULL,
+  as7341_f2 DOUBLE PRECISION NOT NULL,
+  as7341_f3 DOUBLE PRECISION NOT NULL,
+  as7341_f4 DOUBLE PRECISION NOT NULL,
+  as7341_f5 DOUBLE PRECISION NOT NULL,
+  as7341_f6 DOUBLE PRECISION NOT NULL,
+  as7341_f7 DOUBLE PRECISION NOT NULL,
+  as7341_f8 DOUBLE PRECISION NOT NULL,
+  as7341_clear DOUBLE PRECISION NOT NULL,
+  as7341_nir DOUBLE PRECISION NOT NULL,
+  tcs34725_r DOUBLE PRECISION NOT NULL,
+  tcs34725_g DOUBLE PRECISION NOT NULL,
+  tcs34725_b DOUBLE PRECISION NOT NULL,
+  tcs34725_clear DOUBLE PRECISION NOT NULL,
+  vl53l1x_distance_mm DOUBLE PRECISION NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT raw_samples_measurement_sample_unique UNIQUE (measurement_id, sample_number)
+);
+
+-- 5. Sensor Readings Table (Multi-Sensor Ingestion - Legacy/Payload Storage)
 CREATE TABLE IF NOT EXISTS public.sensor_readings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   measurement_id UUID REFERENCES public.measurements(id) ON DELETE CASCADE,
@@ -46,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.sensor_readings (
   recorded_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. ML Predictions Table
+-- 6. ML Predictions Table
 CREATE TABLE IF NOT EXISTS public.ml_predictions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   measurement_id UUID REFERENCES public.measurements(id) ON DELETE CASCADE,
@@ -54,6 +84,10 @@ CREATE TABLE IF NOT EXISTS public.ml_predictions (
   model_version TEXT NOT NULL,
   prediction TEXT NOT NULL,
   confidence FLOAT NOT NULL,
+  probability_class_a DOUBLE PRECISION,
+  probability_class_b DOUBLE PRECISION,
+  probability_class_c DOUBLE PRECISION,
+  probabilities JSONB,
   processing_time_ms INT,
   created_at TIMESTAMPTZ DEFAULT now()
 );

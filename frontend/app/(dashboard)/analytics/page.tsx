@@ -95,6 +95,14 @@ export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [sourceStats, setSourceStats] = useState<{
+    synthetic: number;
+    iot_real: number;
+    quality_good: number;
+    quality_warning: number;
+    quality_poor: number;
+  } | null>(null);
+
   // Active sub-filter for ablation metric view
   const [ablationMetric, setAblationMetric] = useState<'macroF1' | 'accuracy'>('macroF1');
 
@@ -103,17 +111,19 @@ export default function AnalyticsPage() {
       setLoading(true);
       setError(null);
       try {
-        const [measRes, predRes, devRes, modelRes] = await Promise.all([
+        const [measRes, predRes, devRes, modelRes, srcRes] = await Promise.all([
           api.analytics.getMeasurements().catch(() => null),
           api.analytics.getPredictions().catch(() => null),
           api.analytics.getDevices().catch(() => null),
           api.analytics.getModelPerformance().catch(() => null),
+          api.analytics.getDataSources().catch(() => null),
         ]);
 
         if (measRes && measRes.success) setStats(measRes.data);
         if (predRes && predRes.success) setPredictions(predRes.data);
         if (devRes && devRes.success) setDeviceStats(devRes.data);
         if (modelRes && modelRes.success) setModels(modelRes.data);
+        if (srcRes && srcRes.success) setSourceStats(srcRes.data);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
       } finally {
@@ -132,6 +142,10 @@ export default function AnalyticsPage() {
   const pctA = totalClassifications > 0 ? ((classA / totalClassifications) * 100).toFixed(1) : '0.0';
   const pctB = totalClassifications > 0 ? ((classB / totalClassifications) * 100).toFixed(1) : '0.0';
   const pctC = totalClassifications > 0 ? ((classC / totalClassifications) * 100).toFixed(1) : '0.0';
+
+  const totalSources = (sourceStats?.synthetic ?? 0) + (sourceStats?.iot_real ?? 0);
+  const pctReal = totalSources > 0 ? (((sourceStats?.iot_real ?? 0) / totalSources) * 100).toFixed(1) : '0.0';
+  const pctSynth = totalSources > 0 ? (((sourceStats?.synthetic ?? 0) / totalSources) * 100).toFixed(1) : '0.0';
 
   return (
     <div className="space-y-10 pb-12">
@@ -983,6 +997,63 @@ export default function AnalyticsPage() {
             No live predictions recorded yet. Measurements created in the console will appear here in real-time.
           </div>
         )}
+
+        {/* Data Source & Measurement Quality Telemetry */}
+        <div className="pt-4 border-t border-slate-200/60 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Synthetic vs Real */}
+          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2">
+            <div className="flex items-center justify-between font-semibold text-slate-800">
+              <span className="flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-slate-500" />
+                Data Source Provenance
+              </span>
+              <span className="text-[11px] text-slate-500">{totalSources} Sessions</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-center pt-1">
+              <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="text-slate-400 text-[10px] font-medium">SYNTHETIC</div>
+                <div className="text-lg font-bold text-slate-950 mt-0.5">{sourceStats?.synthetic ?? 0}</div>
+                <div className="text-[10px] text-slate-500">{pctSynth}%</div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200">
+                <div className="text-blue-600 text-[10px] font-medium">IOT REAL (ESP32)</div>
+                <div className="text-lg font-bold text-blue-950 mt-0.5">{sourceStats?.iot_real ?? 0}</div>
+                <div className="text-[10px] text-blue-600">{pctReal}%</div>
+              </div>
+            </div>
+            {totalSources > 0 && (
+              <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex mt-2">
+                <div className="h-full bg-slate-600" style={{ width: `${pctSynth}%` }} />
+                <div className="h-full bg-blue-600" style={{ width: `${pctReal}%` }} />
+              </div>
+            )}
+          </div>
+
+          {/* Quality Distribution */}
+          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2">
+            <div className="flex items-center justify-between font-semibold text-slate-800">
+              <span className="flex items-center gap-1.5">
+                <Gauge className="w-3.5 h-3.5 text-slate-500" />
+                Measurement Quality Rating
+              </span>
+              <span className="text-[11px] text-slate-500">Distance Variance</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center pt-1">
+              <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200">
+                <div className="text-emerald-700 text-[10px] font-medium">GOOD</div>
+                <div className="text-lg font-bold text-emerald-950 mt-0.5">{sourceStats?.quality_good ?? 0}</div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200">
+                <div className="text-amber-700 text-[10px] font-medium">WARNING</div>
+                <div className="text-lg font-bold text-amber-950 mt-0.5">{sourceStats?.quality_warning ?? 0}</div>
+              </div>
+              <div className="p-2.5 rounded-xl bg-rose-50/60 border border-rose-200">
+                <div className="text-rose-700 text-[10px] font-medium">POOR</div>
+                <div className="text-lg font-bold text-rose-950 mt-0.5">{sourceStats?.quality_poor ?? 0}</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* ======================================================== */}

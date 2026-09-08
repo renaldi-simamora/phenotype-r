@@ -1,4 +1,4 @@
-import { ApiResponse, User, Device, Measurement, MlPrediction, MlModel, SensorReading } from '../types';
+import { ApiResponse, User, Device, Measurement, MlPrediction, MlModel, SensorReading, RawSensorSample } from '../types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -158,6 +158,39 @@ class ApiClient {
     }
   }
 
+  async downloadFile(endpoint: string, defaultFilename: string): Promise<void> {
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token && token.trim().length > 0) {
+      headers['Authorization'] = `Bearer ${token.trim()}`;
+    }
+
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    const url = `${API_BASE}${cleanEndpoint}`;
+
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      throw new Error(`Download failed with status ${res.status}`);
+    }
+
+    const contentDisposition = res.headers.get('content-disposition');
+    let filename = defaultFilename;
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+
+    const blob = await res.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(blobUrl);
+  }
+
   // Auth endpoints
   auth = {
     register: (payload: { full_name: string; email: string; password: string; confirm_password: string }) =>
@@ -197,17 +230,34 @@ class ApiClient {
 
   // Measurements endpoints
   measurements = {
-    getAll: (params?: { page?: number; limit?: number; status?: string; user_id?: string; device_id?: string }) => {
+    getAll: (params?: {
+      page?: number;
+      limit?: number;
+      status?: string;
+      user_id?: string;
+      device_id?: string;
+      data_source?: string;
+      quality?: string;
+      classification?: string;
+      start_date?: string;
+      end_date?: string;
+    }) => {
       const q = new URLSearchParams();
       if (params?.page) q.set('page', params.page.toString());
       if (params?.limit) q.set('limit', params.limit.toString());
       if (params?.status) q.set('status', params.status);
       if (params?.user_id) q.set('user_id', params.user_id);
       if (params?.device_id) q.set('device_id', params.device_id);
+      if (params?.data_source) q.set('data_source', params.data_source);
+      if (params?.quality) q.set('quality', params.quality);
+      if (params?.classification) q.set('classification', params.classification);
+      if (params?.start_date) q.set('start_date', params.start_date);
+      if (params?.end_date) q.set('end_date', params.end_date);
       return this.request<Measurement[]>(`/measurements?${q.toString()}`);
     },
     getById: (id: string) => this.request<Measurement>(`/measurements/${id}`),
-    create: (payload: { user_id: string; device_id: string }) =>
+    getRawSamples: (id: string) => this.request<RawSensorSample[]>(`/measurements/${id}/raw-samples`),
+    create: (payload: { user_id: string; device_id: string; data_source?: string }) =>
       this.request<Measurement>('/measurements', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -218,6 +268,28 @@ class ApiClient {
         body: JSON.stringify({ status }),
       }),
     getSensors: (id: string) => this.request<SensorReading[]>(`/measurements/${id}/sensors`),
+    downloadMeasurementsCsv: (params?: Record<string, string | number | undefined>) => {
+      const q = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== '') q.set(k, String(v));
+        });
+      }
+      return this.downloadFile(`/measurements/export/csv?${q.toString()}`, `measurements_${Date.now()}.csv`);
+    },
+    downloadRawSamplesCsv: (measurementId?: string, params?: Record<string, string | number | undefined>) => {
+      const q = new URLSearchParams();
+      if (measurementId) q.set('measurement_id', measurementId);
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== '') q.set(k, String(v));
+        });
+      }
+      return this.downloadFile(
+        `/measurements/export/raw-csv?${q.toString()}`,
+        `raw_samples_${measurementId || 'all'}_${Date.now()}.csv`
+      );
+    },
   };
 
   // ML endpoints
@@ -234,6 +306,14 @@ class ApiClient {
       this.request<{ total: number; completed: number; failed: number }>('/analytics/measurements'),
     getPredictions: () =>
       this.request<Record<string, number>>('/analytics/predictions'),
+    getDataSources: () =>
+      this.request<{
+        synthetic: number;
+        iot_real: number;
+        quality_good: number;
+        quality_warning: number;
+        quality_poor: number;
+      }>('/analytics/sources'),
     getDevices: () =>
       this.request<{ total: number; online: number; measuring: number; offline: number }>('/analytics/devices'),
     getModelPerformance: () =>
@@ -245,9 +325,11 @@ class ApiClient {
     sendMeasurement: (payload: {
       device_id: string;
       measurement_id: string;
-      sensors: unknown;
+      data_source?: string;
+      samples?: unknown[];
+      sensors?: unknown;
     }) =>
-      this.request<{ measurement: Measurement; predictionResult?: unknown }>('/iot/measurements', {
+      this.request<{ measurement: Measurement; predictionResult?: unknown; rawSamplesCount?: number }>('/iot/measurements', {
         method: 'POST',
         body: JSON.stringify(payload),
       }),

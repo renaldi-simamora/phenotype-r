@@ -29,6 +29,36 @@ export class AnalyticsService {
     return MlPredictionRepository.getPredictionStats();
   }
 
+  static async getDataSourceStats() {
+    const { data } = await supabaseAdmin
+      .from('measurements')
+      .select('data_source, quality, status');
+
+    const result = {
+      synthetic: 0,
+      iot_real: 0,
+      quality_good: 0,
+      quality_warning: 0,
+      quality_poor: 0,
+    };
+
+    if (data) {
+      for (const row of data) {
+        if (row.data_source === 'iot_real') {
+          result.iot_real++;
+        } else {
+          result.synthetic++;
+        }
+
+        if (row.quality === 'WARNING') result.quality_warning++;
+        else if (row.quality === 'POOR') result.quality_poor++;
+        else result.quality_good++;
+      }
+    }
+
+    return result;
+  }
+
   static async getDeviceStats() {
     const { count: totalDevices } = await supabaseAdmin
       .from('devices')

@@ -9,6 +9,7 @@ router.use(authenticate, authorize('ADMIN'));
 
 router.get('/measurements', AnalyticsController.getMeasurementsStats);
 router.get('/predictions', AnalyticsController.getPredictionsStats);
+router.get('/sources', AnalyticsController.getDataSourcesStats);
 router.get('/devices', AnalyticsController.getDevicesStats);
 router.get('/model-performance', AnalyticsController.getModelPerformance);
 
