@@ -318,6 +318,31 @@ class ApiClient {
       this.request<{ total: number; online: number; measuring: number; offline: number }>('/analytics/devices'),
     getModelPerformance: () =>
       this.request<MlModel[]>('/analytics/model-performance'),
+    /** Fetches the latest completed measurement + its raw samples + prediction */
+    getLatestLiveMeasurement: async (): Promise<{
+      measurement: Measurement | null;
+      rawSamples: RawSensorSample[];
+      prediction: MlPrediction | null;
+    }> => {
+      try {
+        const measRes = await this.request<Measurement[]>('/measurements?limit=1&status=COMPLETED');
+        const measurement = measRes.success && measRes.data?.length ? measRes.data[0] : null;
+        if (!measurement) return { measurement: null, rawSamples: [], prediction: null };
+
+        const [samplesRes, predRes] = await Promise.all([
+          this.request<RawSensorSample[]>(`/measurements/${measurement.id}/raw-samples`).catch(() => null),
+          this.request<MlPrediction>(`/ml/predictions/${measurement.id}`).catch(() => null),
+        ]);
+
+        return {
+          measurement,
+          rawSamples: samplesRes?.success ? (samplesRes.data ?? []) : [],
+          prediction: predRes?.success ? predRes.data : (measurement.prediction ?? null),
+        };
+      } catch {
+        return { measurement: null, rawSamples: [], prediction: null };
+      }
+    },
   };
 
   // IoT Simulation / direct submission

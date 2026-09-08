@@ -22,7 +22,7 @@ export default function SettingsPage() {
   const [savedSuccess, setSavedSuccess] = useState(false);
 
   // Measurement params
-  const [sampleCount, setSampleCount] = useState(10);
+  const [sampleCount, setSampleCount] = useState(20);
   const [measurementTimeout, setMeasurementTimeout] = useState(15);
   const [minDistance, setMinDistance] = useState(35);
   const [maxDistance, setMaxDistance] = useState(50);

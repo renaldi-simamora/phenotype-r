@@ -22,9 +22,6 @@ export class MlPredictionRepository {
     if (predictionData.probability_class_c !== undefined) {
       insertPayload.probability_class_c = predictionData.probability_class_c;
     }
-    if (predictionData.probabilities !== undefined) {
-      insertPayload.probabilities = predictionData.probabilities;
-    }
 
     try {
       const { data, error } = await supabaseAdmin
@@ -59,7 +56,6 @@ export class MlPredictionRepository {
           probability_class_a: predictionData.probability_class_a,
           probability_class_b: predictionData.probability_class_b,
           probability_class_c: predictionData.probability_class_c,
-          probabilities: predictionData.probabilities,
         };
       }
       throw err;

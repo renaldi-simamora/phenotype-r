@@ -134,8 +134,12 @@ export default function DevicePage() {
                 <Wifi className="w-3.5 h-3.5 text-cyan-600" />
                 <span>Wi-Fi Network</span>
               </div>
-              <div className="text-slate-950 font-bold">PHENOTYPE-IoT</div>
-              <div className="text-[10px] text-slate-500">RSSI -54 dBm (Strong)</div>
+              <div className="text-slate-950 font-bold">
+                {primaryDevice.status === 'ONLINE' ? 'PHENOTYPE-IoT' : 'Hardware Pending'}
+              </div>
+              <div className="text-[10px] text-slate-500">
+                {primaryDevice.status === 'ONLINE' ? 'Connected' : 'Device Not Connected'}
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1">
@@ -143,17 +147,23 @@ export default function DevicePage() {
                 <Radio className="w-3.5 h-3.5 text-emerald-600" />
                 <span>IP Address</span>
               </div>
-              <div className="text-slate-950 font-bold">{primaryDevice.ip_address || '192.168.1.142'}</div>
-              <div className="text-[10px] text-slate-500">Subnet 255.255.255.0</div>
+              <div className="text-slate-950 font-bold">{primaryDevice.ip_address || '—'}</div>
+              <div className="text-[10px] text-slate-500">
+                {primaryDevice.ip_address ? 'Assigned' : 'Awaiting DHCP'}
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1">
               <div className="text-slate-400 text-[11px] font-medium flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-amber-600" />
-                <span>System Uptime</span>
+                <span>Device State</span>
               </div>
-              <div className="text-slate-950 font-bold">14h 28m 10s</div>
-              <div className="text-[10px] text-slate-500">Booted today</div>
+              <div className="text-slate-950 font-bold">
+                {primaryDevice.status === 'ONLINE' ? 'Node Active' : 'Software-Only Mode'}
+              </div>
+              <div className="text-[10px] text-slate-500">
+                {primaryDevice.status === 'ONLINE' ? 'Telemetry streaming' : 'Simulation active'}
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1">
@@ -162,9 +172,11 @@ export default function DevicePage() {
                 <span>Last Communication</span>
               </div>
               <div className="text-slate-950 font-bold">
-                {primaryDevice.last_seen ? formatTime(primaryDevice.last_seen) : 'Active now'}
+                {primaryDevice.last_seen ? formatTime(primaryDevice.last_seen) : 'No heartbeat yet'}
               </div>
-              <div className="text-[10px] text-slate-500">Heartbeat: 15s interval</div>
+              <div className="text-[10px] text-slate-500">
+                {primaryDevice.status === 'ONLINE' ? 'Heartbeat: 15s interval' : 'Hardware integration pending'}
+              </div>
             </div>
           </div>
         </div>
@@ -193,16 +205,20 @@ export default function DevicePage() {
                 </div>
                 <span className="font-bold text-slate-950">AS7341 Optical Spectrometer</span>
               </div>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                OPERATIONAL
+              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                primaryDevice?.status === 'ONLINE'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {primaryDevice?.status === 'ONLINE' ? 'OPERATIONAL' : 'SIMULATION READY'}
               </span>
             </div>
             <p className="text-slate-500 text-[11px] leading-relaxed">
-              11-channel spectral channels initialized on I2C address 0x39. Auto-gain and integration time calibrated.
+              10-channel spectral channels (F1-F8, Clear, NIR) on I2C address 0x39. Calibrated for 15-feature fusion.
             </p>
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-2.5">
-              <span>Readout latency: 28ms</span>
-              <span>Noise variance: 0.4%</span>
+              <span>Channel count: 10</span>
+              <span>Range: 415nm - 910nm</span>
             </div>
           </div>
 
@@ -215,15 +231,19 @@ export default function DevicePage() {
                 </div>
                 <span className="font-bold text-slate-950">TCS34725 Color Converter</span>
               </div>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                OPERATIONAL
+              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                primaryDevice?.status === 'ONLINE'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {primaryDevice?.status === 'ONLINE' ? 'OPERATIONAL' : 'SIMULATION READY'}
               </span>
             </div>
             <p className="text-slate-500 text-[11px] leading-relaxed">
-              RGB + Clear chromatic coordinates sensor on I2C address 0x29. Integrated infrared blocking filter verified.
+              RGB + Clear chromatic coordinates sensor on I2C address 0x29. Integrated infrared blocking filter.
             </p>
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-2.5">
-              <span>Readout latency: 15ms</span>
+              <span>Channel count: 4 (R, G, B, Clear)</span>
               <span>CCT Range: 2500K - 9500K</span>
             </div>
           </div>
@@ -237,16 +257,20 @@ export default function DevicePage() {
                 </div>
                 <span className="font-bold text-slate-950">VL53L1X Laser Distance</span>
               </div>
-              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
-                OPERATIONAL
+              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-semibold border ${
+                primaryDevice?.status === 'ONLINE'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-100 text-slate-600 border-slate-200'
+              }`}>
+                {primaryDevice?.status === 'ONLINE' ? 'OPERATIONAL' : 'SIMULATION READY'}
               </span>
             </div>
             <p className="text-slate-500 text-[11px] leading-relaxed">
               Time-of-Flight ranging sensor on I2C address 0x52. Validating 35 to 50 mm focal measurement threshold.
             </p>
             <div className="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-200/60 pt-2.5">
-              <span>Current readout: 38.2 mm</span>
-              <span>Timing budget: 50ms</span>
+              <span>Target range: 35–50 mm</span>
+              <span>Measurement validation only</span>
             </div>
           </div>
         </div>

@@ -13,7 +13,7 @@ export function Footer() {
               <Cpu className="w-4 h-4" />
             </div>
             <span className="text-base tracking-tight font-bold text-slate-950">
-              PHENONODE.
+              PHENOTYPE.
             </span>
           </div>
           <p className="text-xs text-slate-500 max-w-md leading-relaxed">
@@ -70,7 +70,7 @@ export function Footer() {
       </div>
 
       <div className="max-w-7xl mx-auto mt-10 pt-6 border-t border-slate-200/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-        <div>PHENONODE Platform. Final Year University Research Project.</div>
+        <div>PHENOTYPE Platform. Final Year University Research Project.</div>
         <div>All rights reserved.</div>
       </div>
     </footer>

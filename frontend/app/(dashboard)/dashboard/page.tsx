@@ -92,7 +92,7 @@ export default function DashboardPage() {
             <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Device Status</span>
-                <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center">
                   <Radio className="w-4 h-4" />
                 </div>
               </div>
@@ -100,10 +100,12 @@ export default function DashboardPage() {
                 <span className="text-2xl font-extrabold text-slate-950 tracking-tight">
                   {primaryDevice?.device_code || 'ESP32-S3'}
                 </span>
-                <StatusBadge status={primaryDevice?.status || 'ONLINE'} size="sm" />
+                <StatusBadge status={primaryDevice?.status || 'OFFLINE'} size="sm" />
               </div>
               <div className="text-xs text-slate-500">
-                Last seen: {primaryDevice?.last_seen ? formatTime(primaryDevice.last_seen) : 'Active now'}
+                {primaryDevice?.status === 'ONLINE'
+                  ? `Last seen: ${primaryDevice.last_seen ? formatTime(primaryDevice.last_seen) : 'Active now'}`
+                  : 'Hardware Integration Pending'}
               </div>
             </div>
 
@@ -115,10 +117,12 @@ export default function DashboardPage() {
                   <Gauge className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-2xl font-extrabold text-slate-950 tracking-tight">3 / 3 Ready</div>
-              <div className="text-xs text-emerald-700 font-medium flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span>AS7341 · TCS34725 · VL53L1X</span>
+              <div className="text-2xl font-extrabold text-slate-950 tracking-tight">
+                {primaryDevice?.status === 'ONLINE' ? '3 / 3 Ready' : 'Simulation'}
+              </div>
+              <div className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
+                <span>AS7341 · TCS34725 · VL53L1X (15-feat)</span>
               </div>
             </div>
 
@@ -148,14 +152,16 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-2xl font-extrabold text-slate-950 tracking-tight">
-                  {latestMeasurement?.prediction?.prediction || 'Class C'}
+                  {latestMeasurement?.prediction?.prediction || '—'}
                 </span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                  {latestMeasurement?.prediction ? `${(latestMeasurement.prediction.confidence * 100).toFixed(1)}%` : '76.2%'}
-                </span>
+                {latestMeasurement?.prediction && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    {(latestMeasurement.prediction.confidence * 100).toFixed(1)}%
+                  </span>
+                )}
               </div>
               <div className="text-xs text-slate-500">
-                Confidence decision score
+                {latestMeasurement?.prediction ? 'SVM confidence score' : 'No prediction recorded'}
               </div>
             </div>
           </>
@@ -215,39 +221,44 @@ export default function DashboardPage() {
               <div className="p-5 rounded-2xl bg-white/60 border border-slate-200/70 space-y-3 text-xs">
                 <div className="flex justify-between text-slate-500 text-[11px] font-medium">
                   <span>Class Probability Distribution</span>
-                  <span>SVC Algorithm</span>
+                  <span>Linear SVM</span>
                 </div>
-                <div className="space-y-2.5">
-                  <div>
-                    <div className="flex justify-between text-[11px] text-slate-600 font-medium mb-1">
-                      <span>Class A</span>
-                      <span>4.98%</span>
-                    </div>
-                    <div className="h-2 bg-slate-200/70 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-400 rounded-full" style={{ width: '4.98%' }} />
-                    </div>
+                {latestMeasurement?.prediction?.probability_class_a != null ||
+                latestMeasurement?.prediction?.probability_class_b != null ||
+                latestMeasurement?.prediction?.probability_class_c != null ? (
+                  <div className="space-y-2.5">
+                    {[
+                      { label: 'Class A', val: latestMeasurement.prediction.probability_class_a },
+                      { label: 'Class B', val: latestMeasurement.prediction.probability_class_b },
+                      { label: 'Class C', val: latestMeasurement.prediction.probability_class_c },
+                    ]
+                      .filter((c) => c.val != null)
+                      .map((c) => {
+                        const pct = ((c.val ?? 0) * 100).toFixed(1);
+                        const isPred = latestMeasurement.prediction?.prediction?.toLowerCase().includes(c.label.toLowerCase());
+                        return (
+                          <div key={c.label}>
+                            <div className={`flex justify-between text-[11px] font-medium mb-1 ${isPred ? 'text-slate-950 font-bold' : 'text-slate-600'}`}>
+                              <span>{c.label} {isPred ? '(Predicted)' : ''}</span>
+                              <span>{pct}%</span>
+                            </div>
+                            <div className="h-2 bg-slate-200/70 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${isPred ? 'bg-slate-950' : 'bg-slate-400'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                   </div>
-
-                  <div>
-                    <div className="flex justify-between text-[11px] text-slate-600 font-medium mb-1">
-                      <span>Class B</span>
-                      <span>18.78%</span>
-                    </div>
-                    <div className="h-2 bg-slate-200/70 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-400 rounded-full" style={{ width: '18.78%' }} />
-                    </div>
+                ) : (
+                  <div className="py-2 text-[11px] text-slate-400 text-center">
+                    {latestMeasurement?.prediction
+                      ? `Confidence score: ${(latestMeasurement.prediction.confidence * 100).toFixed(1)}% (Per-class probability breakdown recorded in full evaluation)`
+                      : 'No prediction available for latest measurement'}
                   </div>
-
-                  <div>
-                    <div className="flex justify-between text-[11px] text-slate-950 font-bold mb-1">
-                      <span>Class C (Identified)</span>
-                      <span>76.24%</span>
-                    </div>
-                    <div className="h-2 bg-slate-200/70 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-950 rounded-full" style={{ width: '76.24%' }} />
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
               <div className="flex justify-end pt-1">
@@ -362,10 +373,10 @@ export default function DashboardPage() {
                       <StatusBadge status={m.status} size="sm" />
                     </td>
                     <td className="py-3.5 px-4 font-semibold text-slate-900">
-                      {m.prediction?.prediction || 'Class C'}
+                      {m.prediction?.prediction || '—'}
                     </td>
                     <td className="py-3.5 px-4 text-slate-600 font-medium">
-                      {m.prediction ? `${(m.prediction.confidence * 100).toFixed(1)}%` : '76.2%'}
+                      {m.prediction ? `${(m.prediction.confidence * 100).toFixed(1)}%` : '—'}
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <Link

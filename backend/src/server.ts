@@ -3,7 +3,7 @@ import { env } from './config/env';
 import { logger } from './utils/logger';
 
 const server = app.listen(env.PORT, () => {
-  logger.info(`⚡ PHENONODE Backend API running on port ${env.PORT} in ${env.NODE_ENV} mode`);
+  logger.info(`⚡ PHENOTYPE Backend API running on port ${env.PORT} in ${env.NODE_ENV} mode`);
   logger.info(`🔗 ML Service URL configured as: ${env.ML_SERVICE_URL}`);
 });
 

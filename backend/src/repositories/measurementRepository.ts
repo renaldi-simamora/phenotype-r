@@ -33,6 +33,9 @@ export class MeasurementRepository {
     if (prediction) {
       measurement.prediction = prediction;
     }
+    if (!measurement.sample_count) measurement.sample_count = 20;
+    if (!measurement.quality) measurement.quality = 'GOOD';
+    if (!measurement.data_source) measurement.data_source = 'synthetic';
 
     return measurement;
   }
@@ -45,7 +48,15 @@ export class MeasurementRepository {
       .single();
 
     if (error || !data) return null;
-    return data as Measurement;
+    const measurement = data as unknown as Measurement;
+    const prediction = await MlPredictionRepository.findByMeasurementId(measurement.id);
+    if (prediction) {
+      measurement.prediction = prediction;
+    }
+    if (!measurement.sample_count) measurement.sample_count = 20;
+    if (!measurement.quality) measurement.quality = 'GOOD';
+    if (!measurement.data_source) measurement.data_source = 'synthetic';
+    return measurement;
   }
 
   static async findAll(

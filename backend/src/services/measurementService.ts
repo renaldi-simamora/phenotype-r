@@ -142,7 +142,7 @@ export class MeasurementService {
       throw Err.notFound(`Measurement ${input.measurement_id} tidak ditemukan`, 'MEASUREMENT_NOT_FOUND');
     }
 
-    const dataSource: DataSource = input.data_source || 'iot_real';
+    const dataSource: DataSource = input.data_source || 'synthetic';
 
     // 2. Prepare exactly 20 raw samples
     const rawSamples: RawSensorSample[] = this.normalizeRawSamples(measurement.id, input);

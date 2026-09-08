@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Binary,
   Layers,
@@ -20,9 +20,20 @@ import {
   Workflow,
   FileCheck2,
   Lock,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Cpu,
+  Microscope,
+  Zap,
+  AlertCircle,
+  Clock,
+  ChevronRight,
+  Eye,
+  FlaskConical,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { MlModel } from '../../../types';
+import { MlModel, Measurement, MlPrediction, RawSensorSample } from '../../../types';
 import { CardSkeleton } from '../../../components/SkeletonLoader';
 import { ErrorBanner } from '../../../components/ErrorBanner';
 
@@ -87,14 +98,236 @@ const ABLATION_STUDY_DATA = [
   { config: 'All Sensors (Standard)', nFeat: 15, macroF1: 78.41, accuracy: 80.0, note: 'Canonical 15-feature fusion', isStandard: true },
 ];
 
+// VL53L1X valid range for measurement-position check
+const VL53L1X_VALID_MIN = 35;
+const VL53L1X_VALID_MAX = 50;
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+function calcStats(values: number[]) {
+  if (!values.length) return { min: 0, max: 0, avg: 0, std: 0, last: 0 };
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  const variance = values.reduce((a, b) => a + (b - avg) ** 2, 0) / values.length;
+  const std = Math.sqrt(variance);
+  const last = values[values.length - 1];
+  return { min, max, avg, std, last };
+}
+
+function formatTs(ts?: string | null): string {
+  if (!ts) return '—';
+  try {
+    return new Date(ts).toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'medium' });
+  } catch {
+    return ts;
+  }
+}
+
+function formatElapsed(startedAt?: string, completedAt?: string): string | null {
+  if (!startedAt || !completedAt) return null;
+  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (ms < 0) return null;
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// Deterministic AI insight generator — no LLM, based on actual data
+function generateInsight(
+  prediction: MlPrediction | null,
+  measurement: Measurement | null,
+  rawSamples: RawSensorSample[]
+): string[] {
+  const lines: string[] = [];
+  if (!prediction || !measurement) {
+    lines.push('No recent measurement available. Perform a measurement with the ESP32-S3 to see insights.');
+    return lines;
+  }
+
+  const conf = (prediction.confidence * 100).toFixed(1);
+  const cls = prediction.prediction || 'Unknown';
+  lines.push(`The latest measurement was classified as ${cls} with ${conf}% confidence by the SVM model.`);
+
+  const quality = measurement.quality || 'GOOD';
+  const distValues = rawSamples.map((s) => s.vl53l1x_distance_mm).filter((v) => v != null && v > 0);
+  const distAvg = distValues.length ? (distValues.reduce((a, b) => a + b, 0) / distValues.length).toFixed(1) : null;
+  if (distAvg) {
+    lines.push(`Measurement quality is ${quality}. Average distance from VL53L1X: ${distAvg} mm (valid range: ${VL53L1X_VALID_MIN}–${VL53L1X_VALID_MAX} mm).`);
+  } else {
+    lines.push(`Measurement quality is ${quality}.`);
+  }
+
+  lines.push(
+    `The most influential features for this classification include TCS34725_B (14.23%), AS7341_F1 (12.04%), and TCS34725_R (11.63%), based on the trained model's permutation importance analysis.`
+  );
+
+  if (prediction.confidence < 0.7) {
+    lines.push(`⚠ Confidence is below 70%. This prediction may be less reliable. Consider repeating the measurement.`);
+  }
+  if (quality === 'POOR') {
+    lines.push(`⚠ Measurement quality is POOR. Distance may be outside the valid range. Results may be unreliable.`);
+  }
+  if (quality === 'WARNING') {
+    lines.push(`⚠ Measurement quality is WARNING. Some samples may have marginal distance readings.`);
+  }
+
+  const src = measurement.data_source || 'synthetic';
+  lines.push(`Data source: ${src === 'iot_real' ? 'Real IoT (ESP32-S3)' : 'Synthetic / Demo data'}. Predicted class labels (A/B/C) are research-defined categories.`);
+
+  return lines;
+}
+
+// ==========================================
+// MINI SVG LINE CHART (no dependencies)
+// ==========================================
+function MiniLineChart({
+  data,
+  color = '#0f172a',
+  refMin,
+  refMax,
+  height = 64,
+}: {
+  data: number[];
+  color?: string;
+  refMin?: number;
+  refMax?: number;
+  height?: number;
+}) {
+  if (!data.length) return <div className="h-16 flex items-center justify-center text-xs text-slate-400">No data</div>;
+
+  const W = 300;
+  const H = height;
+  const pad = 4;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  const toX = (i: number) => pad + (i / Math.max(data.length - 1, 1)) * (W - pad * 2);
+  const toY = (v: number) => H - pad - ((v - min) / range) * (H - pad * 2);
+
+  const points = data.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+
+  // Reference band (VL53L1X valid range)
+  const refBandTop = refMax != null ? toY(Math.min(refMax, max + range * 0.1)) : null;
+  const refBandBot = refMin != null ? toY(Math.max(refMin, min - range * 0.1)) : null;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
+      {/* Reference range band */}
+      {refBandTop != null && refBandBot != null && (
+        <rect
+          x={pad}
+          y={Math.min(refBandTop, refBandBot)}
+          width={W - pad * 2}
+          height={Math.abs(refBandBot - refBandTop)}
+          fill="rgba(16,185,129,0.08)"
+          stroke="rgba(16,185,129,0.3)"
+          strokeWidth="0.5"
+          strokeDasharray="4,2"
+        />
+      )}
+      {/* Line */}
+      <polyline
+        points={points}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {/* Dots */}
+      {data.map((v, i) => (
+        <circle key={i} cx={toX(i)} cy={toY(v)} r="2" fill={color} />
+      ))}
+    </svg>
+  );
+}
+
+// ==========================================
+// STAT MINI ROW
+// ==========================================
+function StatRow({ label, value, unit = '' }: { label: string; value: string | number | null; unit?: string }) {
+  return (
+    <div className="flex items-center justify-between text-[11px]">
+      <span className="text-slate-400">{label}</span>
+      <span className="font-mono font-semibold text-slate-800">
+        {value != null ? `${typeof value === 'number' ? value.toFixed(2) : value}${unit}` : '—'}
+      </span>
+    </div>
+  );
+}
+
+// ==========================================
+// PIPELINE STEP
+// ==========================================
+function PipelineStep({
+  icon,
+  label,
+  sub,
+  active,
+  last,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  sub?: string;
+  active?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+      <div
+        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+          active ? 'bg-slate-950 border-slate-950 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400'
+        }`}
+      >
+        {icon}
+      </div>
+      <div className="text-center">
+        <div className={`text-[11px] font-bold ${active ? 'text-slate-950' : 'text-slate-400'}`}>{label}</div>
+        {sub && <div className="text-[9.5px] text-slate-400">{sub}</div>}
+      </div>
+      {!last && (
+        <div className="hidden md:block absolute top-5 left-full w-full h-px bg-slate-200/80 pointer-events-none" />
+      )}
+    </div>
+  );
+}
+
+// ==========================================
+// AS7341 CHANNELS
+// ==========================================
+const AS7341_CHANNELS = [
+  { key: 'as7341_f1' as const, label: 'F1', desc: '415nm Violet', color: '#7c3aed' },
+  { key: 'as7341_f2' as const, label: 'F2', desc: '445nm Indigo', color: '#4f46e5' },
+  { key: 'as7341_f3' as const, label: 'F3', desc: '480nm Blue', color: '#2563eb' },
+  { key: 'as7341_f4' as const, label: 'F4', desc: '515nm Cyan', color: '#0891b2' },
+  { key: 'as7341_f5' as const, label: 'F5', desc: '555nm Green', color: '#059669' },
+  { key: 'as7341_f6' as const, label: 'F6', desc: '590nm Yellow', color: '#ca8a04' },
+  { key: 'as7341_f7' as const, label: 'F7', desc: '630nm Red', color: '#dc2626' },
+  { key: 'as7341_f8' as const, label: 'F8', desc: '680nm Deep Red', color: '#9f1239' },
+  { key: 'as7341_clear' as const, label: 'Clear', desc: 'Broadband', color: '#64748b' },
+  { key: 'as7341_nir' as const, label: 'NIR', desc: '910nm NIR', color: '#78350f' },
+];
+
+const TCS_CHANNELS = [
+  { key: 'tcs34725_r' as const, label: 'R', desc: 'Red 615nm', color: '#dc2626' },
+  { key: 'tcs34725_g' as const, label: 'G', desc: 'Green 525nm', color: '#16a34a' },
+  { key: 'tcs34725_b' as const, label: 'B', desc: 'Blue 465nm', color: '#2563eb' },
+  { key: 'tcs34725_clear' as const, label: 'Clear', desc: 'Broadband', color: '#64748b' },
+];
+
+// ==========================================
+// MAIN PAGE
+// ==========================================
 export default function AnalyticsPage() {
+  // ---- Legacy analytics state ----
   const [stats, setStats] = useState<{ total: number; completed: number; failed: number } | null>(null);
   const [predictions, setPredictions] = useState<Record<string, number>>({});
   const [deviceStats, setDeviceStats] = useState<{ total: number; online: number; measuring: number; offline: number } | null>(null);
   const [, setModels] = useState<MlModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [sourceStats, setSourceStats] = useState<{
     synthetic: number;
     iot_real: number;
@@ -102,10 +335,36 @@ export default function AnalyticsPage() {
     quality_warning: number;
     quality_poor: number;
   } | null>(null);
-
-  // Active sub-filter for ablation metric view
   const [ablationMetric, setAblationMetric] = useState<'macroF1' | 'accuracy'>('macroF1');
 
+  // ---- Live monitoring state ----
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [liveMeasurement, setLiveMeasurement] = useState<Measurement | null>(null);
+  const [liveRawSamples, setLiveRawSamples] = useState<RawSensorSample[]>([]);
+  const [livePrediction, setLivePrediction] = useState<MlPrediction | null>(null);
+  const [lastSync, setLastSync] = useState<Date | null>(null);
+  const [as7341Channel, setAs7341Channel] = useState<string>('as7341_f1');
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'error'>('checking');
+
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ---- Fetch live monitoring data ----
+  const fetchLiveData = useCallback(async () => {
+    try {
+      const live = await api.analytics.getLatestLiveMeasurement();
+      setLiveMeasurement(live.measurement);
+      setLiveRawSamples(live.rawSamples);
+      setLivePrediction(live.prediction);
+      setLastSync(new Date());
+      setBackendStatus('online');
+    } catch {
+      setBackendStatus('error');
+    } finally {
+      setLiveLoading(false);
+    }
+  }, []);
+
+  // ---- Fetch aggregate analytics ----
   useEffect(() => {
     const fetchAnalytics = async () => {
       setLoading(true);
@@ -118,7 +377,6 @@ export default function AnalyticsPage() {
           api.analytics.getModelPerformance().catch(() => null),
           api.analytics.getDataSources().catch(() => null),
         ]);
-
         if (measRes && measRes.success) setStats(measRes.data);
         if (predRes && predRes.success) setPredictions(predRes.data);
         if (devRes && devRes.success) setDeviceStats(devRes.data);
@@ -130,10 +388,17 @@ export default function AnalyticsPage() {
         setLoading(false);
       }
     };
-
     fetchAnalytics();
-  }, []);
+    fetchLiveData();
 
+    // Auto-refresh live data every 30 seconds
+    refreshIntervalRef.current = setInterval(fetchLiveData, 30_000);
+    return () => {
+      if (refreshIntervalRef.current) clearInterval(refreshIntervalRef.current);
+    };
+  }, [fetchLiveData]);
+
+  // ---- Derived values ----
   const totalClassifications = Object.values(predictions).reduce((a, b) => a + b, 0);
   const classA = predictions['Class A'] || predictions['Class_A'] || 0;
   const classB = predictions['Class B'] || predictions['Class_B'] || 0;
@@ -147,48 +412,789 @@ export default function AnalyticsPage() {
   const pctReal = totalSources > 0 ? (((sourceStats?.iot_real ?? 0) / totalSources) * 100).toFixed(1) : '0.0';
   const pctSynth = totalSources > 0 ? (((sourceStats?.synthetic ?? 0) / totalSources) * 100).toFixed(1) : '0.0';
 
+  // ---- Derived sensor stats ----
+  const as7341Stats = AS7341_CHANNELS.map((ch) => ({
+    ...ch,
+    values: liveRawSamples.map((s) => (s[ch.key] as number) ?? 0),
+    stats: calcStats(liveRawSamples.map((s) => (s[ch.key] as number) ?? 0)),
+  }));
+
+  const tcsStats = TCS_CHANNELS.map((ch) => ({
+    ...ch,
+    values: liveRawSamples.map((s) => (s[ch.key] as number) ?? 0),
+    stats: calcStats(liveRawSamples.map((s) => (s[ch.key] as number) ?? 0)),
+  }));
+
+  const distValues = liveRawSamples.map((s) => s.vl53l1x_distance_mm ?? 0);
+  const distStats = calcStats(distValues);
+  const distInRange = distValues.filter((v) => v >= VL53L1X_VALID_MIN && v <= VL53L1X_VALID_MAX).length;
+  const distValidity = !distValues.length
+    ? 'NO DATA'
+    : distInRange === distValues.length
+    ? 'ALL IN RANGE'
+    : distInRange >= distValues.length * 0.8
+    ? 'MOSTLY IN RANGE'
+    : 'OUT OF RANGE';
+
+  // Sensor health from raw samples
+  const as7341Healthy =
+    liveRawSamples.length > 0 &&
+    liveRawSamples.every((s) => s.as7341_f1 != null && s.as7341_f1 >= 0);
+  const tcsHealthy =
+    liveRawSamples.length > 0 &&
+    liveRawSamples.every((s) => s.tcs34725_r != null && s.tcs34725_r >= 0);
+  const vlHealthy =
+    liveRawSamples.length > 0 &&
+    liveRawSamples.every((s) => s.vl53l1x_distance_mm != null && s.vl53l1x_distance_mm > 0);
+
+  // Active channel for AS7341 chart
+  const activeChannel = AS7341_CHANNELS.find((c) => c.key === as7341Channel) || AS7341_CHANNELS[0];
+  const activeChannelValues = liveRawSamples.map((s) => (s[activeChannel.key] as number) ?? 0);
+  const activeChannelStats = calcStats(activeChannelValues);
+
+  // Processing lifecycle stages
+  const mStatus = liveMeasurement?.status;
+  const lifecycleStages = [
+    { label: 'Started', done: !!liveMeasurement },
+    { label: 'Dist. Check', done: !!liveMeasurement },
+    { label: 'Samples (20)', done: liveRawSamples.length > 0 },
+    { label: 'Uploaded', done: !!liveMeasurement },
+    { label: 'Preprocessing', done: mStatus === 'COMPLETED' || mStatus === 'ML_PROCESSING_FAILED' },
+    { label: 'SVM Inference', done: !!livePrediction },
+    { label: 'Saved', done: !!livePrediction },
+  ];
+
+  // AI Insight lines
+  const insightLines = generateInsight(livePrediction, liveMeasurement, liveRawSamples);
+
+  // Prediction probability display
+  const predConf = livePrediction ? (livePrediction.confidence * 100).toFixed(1) : null;
+  const pA =
+    livePrediction?.probability_class_a != null
+      ? (livePrediction.probability_class_a * 100).toFixed(1)
+      : livePrediction?.probabilities?.Class_A != null
+      ? (livePrediction.probabilities.Class_A * 100).toFixed(1)
+      : null;
+  const pB =
+    livePrediction?.probability_class_b != null
+      ? (livePrediction.probability_class_b * 100).toFixed(1)
+      : livePrediction?.probabilities?.Class_B != null
+      ? (livePrediction.probabilities.Class_B * 100).toFixed(1)
+      : null;
+  const pC =
+    livePrediction?.probability_class_c != null
+      ? (livePrediction.probability_class_c * 100).toFixed(1)
+      : livePrediction?.probabilities?.Class_C != null
+      ? (livePrediction.probabilities.Class_C * 100).toFixed(1)
+      : null;
+
   return (
     <div className="space-y-10 pb-12">
+
       {/* ======================================================== */}
-      {/* SECTION 1: SVM MODEL OVERVIEW & RESEARCH CONSOLE HEADER */}
+      {/* ANALYTICS PAGE HEADER                                     */}
       {/* ======================================================== */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-slate-200/60">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 pb-6 border-b border-slate-200/60">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-[10px] font-bold tracking-widest text-slate-500 uppercase">
-              ML RESEARCH &amp; EVALUATION CONSOLE
+              PHENOTYPE ANALYTICS
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/90 shadow-2xs">
               {EXPERIMENT_METRICS.modelVersion}
             </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200/80 uppercase shadow-2xs">
-              ACTIVE
-            </span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
-            SVM Model Analytics
+            IoT Monitoring & SVM Intelligence
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Support Vector Machine evaluation, multi-sensor feature permutation importance, and comprehensive ablation performance analysis.
+            Live ESP32-S3 sensor telemetry, SVM classification inference, model evaluation, and research analytics.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start md:self-auto">
-          <div className="px-3 py-1.5 rounded-full glass-pill border border-white/90 text-slate-600 text-[11px] font-medium flex items-center gap-1.5 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Linear Kernel (C=1.0)</span>
+        {/* System Status Bar */}
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {/* Backend status */}
+          <div className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs ${
+            backendStatus === 'online'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : backendStatus === 'error'
+              ? 'bg-rose-50 border-rose-200 text-rose-700'
+              : 'bg-slate-50 border-slate-200 text-slate-500'
+          }`}>
+            {backendStatus === 'online' ? <Wifi className="w-3 h-3" /> : backendStatus === 'error' ? <WifiOff className="w-3 h-3" /> : <RefreshCw className="w-3 h-3 animate-spin" />}
+            Backend {backendStatus === 'online' ? 'ONLINE' : backendStatus === 'error' ? 'ERROR' : 'CHECKING'}
           </div>
+
+          {/* Device status */}
+          <div className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs ${
+            deviceStats && deviceStats.online > 0
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+              : deviceStats && deviceStats.measuring > 0
+              ? 'bg-blue-50 border-blue-200 text-blue-700'
+              : 'bg-slate-50 border-slate-200 text-slate-500'
+          }`}>
+            <Cpu className="w-3 h-3" />
+            {deviceStats
+              ? deviceStats.online > 0
+                ? `${deviceStats.online} ESP32 ONLINE`
+                : deviceStats.measuring > 0
+                ? `${deviceStats.measuring} MEASURING`
+                : 'Hardware Integration Pending'
+              : 'Hardware Integration Pending'}
+          </div>
+
+          {/* ML service */}
           <div className="px-3 py-1.5 rounded-full bg-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 shadow-xs">
-            <Layers className="w-3.5 h-3.5" />
-            <span>15 Features · 3 Classes</span>
+            <Sparkles className="w-3 h-3" />
+            SVM Active
           </div>
+
+          {/* Last sync */}
+          {lastSync && (
+            <div className="px-3 py-1.5 rounded-full glass-pill border border-white/90 text-slate-500 text-[11px] flex items-center gap-1.5">
+              <Clock className="w-3 h-3" />
+              Synced {lastSync.toLocaleTimeString()}
+            </div>
+          )}
+
+          {/* Manual refresh */}
+          <button
+            onClick={() => { setLiveLoading(true); fetchLiveData(); }}
+            className="px-3 py-1.5 rounded-full glass-pill border border-white/90 text-slate-500 text-[11px] flex items-center gap-1.5 hover:text-slate-800 transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3 h-3 ${liveLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
         </div>
       </div>
 
       {error && <ErrorBanner message={error} />}
 
       {/* ======================================================== */}
-      {/* PRIMARY MODEL METRICS CARDS (EXPERIMENT RESULT)          */}
+      {/* SECTION 1 — LIVE IoT MONITORING                          */}
+      {/* ======================================================== */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
+            <Activity className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">Live IoT Monitoring</h2>
+            <p className="text-[10.5px] text-slate-400">Latest completed measurement from the backend</p>
+          </div>
+          <span className="ml-auto text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 uppercase">
+            Auto-refresh 30s
+          </span>
+        </div>
+
+        {liveLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <CardSkeleton /><CardSkeleton /><CardSkeleton />
+          </div>
+        ) : !liveMeasurement ? (
+          <div className="glass-panel rounded-3xl p-8 text-center space-y-2">
+            <HardDrive className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold text-slate-500">No completed measurements found</p>
+            <p className="text-xs text-slate-400">Perform a measurement using the ESP32-S3 or the Measurement console.</p>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Measurement info card */}
+              <div className="glass-panel p-5 rounded-3xl border border-white/85 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Measurement</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                    liveMeasurement.status === 'COMPLETED'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {liveMeasurement.status}
+                  </span>
+                </div>
+                <div className="font-mono text-lg font-black text-slate-950">{liveMeasurement.measurement_code}</div>
+                <div className="space-y-1.5 text-xs">
+                  <StatRow label="Device" value={liveMeasurement.device?.device_code || liveMeasurement.device_id?.slice(0,8) + '…'} />
+                  <StatRow label="Timestamp" value={formatTs(liveMeasurement.created_at)} />
+                  <StatRow label="Samples" value={`${liveRawSamples.length} / ${liveMeasurement.sample_count ?? 20}`} />
+                  {formatElapsed(liveMeasurement.started_at, liveMeasurement.completed_at) && (
+                    <StatRow label="Duration" value={formatElapsed(liveMeasurement.started_at, liveMeasurement.completed_at)} />
+                  )}
+                </div>
+              </div>
+
+              {/* Quality & source card */}
+              <div className="glass-panel p-5 rounded-3xl border border-white/85 shadow-2xs space-y-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quality & Source</span>
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Measurement Quality</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                      liveMeasurement.quality === 'GOOD'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : liveMeasurement.quality === 'WARNING'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-rose-50 text-rose-700 border-rose-200'
+                    }`}>
+                      {liveMeasurement.quality || 'GOOD'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Data Source</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold border ${
+                      liveMeasurement.data_source === 'iot_real'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-slate-100 text-slate-600 border-slate-200'
+                    }`}>
+                      {liveMeasurement.data_source === 'iot_real' ? 'IoT REAL' : 'SYNTHETIC'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Avg Distance</span>
+                    <span className="font-mono text-[11px] font-semibold text-slate-800">
+                      {distStats.avg > 0 ? `${distStats.avg.toFixed(1)} mm` : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Distance Range</span>
+                    <span className={`text-[10.5px] font-bold ${
+                      distValidity === 'ALL IN RANGE' ? 'text-emerald-600' : distValidity === 'OUT OF RANGE' ? 'text-rose-600' : 'text-amber-600'
+                    }`}>
+                      {distValidity}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Processing lifecycle */}
+              <div className="glass-panel p-5 rounded-3xl border border-white/85 shadow-2xs space-y-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Processing Lifecycle</span>
+                <div className="space-y-1.5">
+                  {lifecycleStages.map((stage, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        stage.done ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-400'
+                      }`}>
+                        {stage.done ? <CheckCircle2 className="w-2.5 h-2.5" /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
+                      </div>
+                      <span className={stage.done ? 'text-slate-800 font-medium' : 'text-slate-400'}>{stage.label}</span>
+                      {i < lifecycleStages.length - 1 && (
+                        <ChevronRight className="w-3 h-3 text-slate-300 ml-auto" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 2 — REAL-TIME SENSOR MONITORING                  */}
+      {/* ======================================================== */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-full bg-cyan-50 text-cyan-700 flex items-center justify-center">
+            <Microscope className="w-3.5 h-3.5" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">Real-Time Sensor Monitoring</h2>
+            <p className="text-[10.5px] text-slate-400">
+              {liveRawSamples.length > 0
+                ? `Sample trends across ${liveRawSamples.length} samples from the latest measurement`
+                : 'No raw samples available — awaiting measurement'}
+            </p>
+          </div>
+        </div>
+
+        {liveRawSamples.length === 0 ? (
+          <div className="glass-panel rounded-3xl p-8 text-center space-y-2">
+            <FlaskConical className="w-8 h-8 text-slate-300 mx-auto" />
+            <p className="text-sm font-semibold text-slate-500">No raw sample data found</p>
+            <p className="text-xs text-slate-400">Run a measurement and ensure the DB migration (migration_update_v2.sql) has been applied in Supabase.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* AS7341 Card */}
+            <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-cyan-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-950">AS7341 Spectral Sensor</h3>
+                    <p className="text-[10.5px] text-slate-400">10 channels · F1–F8, Clear, NIR · 415–910nm</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-cyan-800 bg-cyan-50 px-2.5 py-1 rounded-full border border-cyan-200 self-start sm:self-auto">
+                  10 Spectral Features
+                </span>
+              </div>
+
+              {/* Channel selector */}
+              <div className="flex flex-wrap gap-1.5">
+                {AS7341_CHANNELS.map((ch) => (
+                  <button
+                    key={ch.key}
+                    onClick={() => setAs7341Channel(ch.key)}
+                    className={`px-2.5 py-1 rounded-full text-[10.5px] font-semibold border transition-all cursor-pointer ${
+                      as7341Channel === ch.key
+                        ? 'text-white border-transparent shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'
+                    }`}
+                    style={as7341Channel === ch.key ? { backgroundColor: activeChannel.color, borderColor: activeChannel.color } : {}}
+                  >
+                    {ch.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Selected channel chart + stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-1">
+                  <div className="text-[10.5px] font-semibold text-slate-500">
+                    {activeChannel.label} ({activeChannel.desc}) — Sample 1→{liveRawSamples.length}
+                  </div>
+                  <div className="bg-white/60 rounded-2xl p-3 border border-slate-200/60">
+                    <MiniLineChart data={activeChannelValues} color={activeChannel.color} height={72} />
+                  </div>
+                </div>
+                <div className="space-y-2 p-4 rounded-2xl bg-white/60 border border-slate-200/60 text-xs self-start">
+                  <div className="font-bold text-slate-800 text-[11px]">{activeChannel.label} Statistics</div>
+                  <StatRow label="Current (last)" value={activeChannelStats.last.toFixed(0)} />
+                  <StatRow label="Min" value={activeChannelStats.min.toFixed(0)} />
+                  <StatRow label="Max" value={activeChannelStats.max.toFixed(0)} />
+                  <StatRow label="Average" value={activeChannelStats.avg.toFixed(1)} />
+                  <StatRow label="Std Dev" value={activeChannelStats.std.toFixed(1)} />
+                </div>
+              </div>
+
+              {/* Summary grid of all 10 channels */}
+              <div className="grid grid-cols-5 gap-2">
+                {as7341Stats.map((ch) => (
+                  <button
+                    key={ch.key}
+                    onClick={() => setAs7341Channel(ch.key)}
+                    className={`p-2 rounded-xl border text-left cursor-pointer transition-all hover:border-slate-400 ${
+                      as7341Channel === ch.key ? 'border-slate-900 bg-slate-50' : 'border-slate-200/70 bg-white/50'
+                    }`}
+                  >
+                    <div className="text-[9.5px] font-bold" style={{ color: ch.color }}>{ch.label}</div>
+                    <div className="text-[11px] font-black text-slate-950">{ch.stats.avg.toFixed(0)}</div>
+                    <div className="text-[9px] text-slate-400">avg</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* TCS34725 Card */}
+            <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-purple-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-950">TCS34725 RGB Color Sensor</h3>
+                    <p className="text-[10.5px] text-slate-400">4 channels · R, G, B, Clear</p>
+                  </div>
+                </div>
+                <span className="text-[10px] font-bold text-purple-800 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200 self-start sm:self-auto">
+                  4 Color Features
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tcsStats.map((ch) => (
+                  <div key={ch.key} className="bg-white/60 rounded-2xl border border-slate-200/60 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold" style={{ color: ch.color }}>{ch.label}</span>
+                      <span className="text-[9.5px] text-slate-400">{ch.desc}</span>
+                    </div>
+                    <MiniLineChart data={ch.values} color={ch.color} height={48} />
+                    <div className="grid grid-cols-4 gap-1 text-[10px]">
+                      <div className="text-center"><div className="text-slate-400">Min</div><div className="font-bold text-slate-800">{ch.stats.min.toFixed(0)}</div></div>
+                      <div className="text-center"><div className="text-slate-400">Max</div><div className="font-bold text-slate-800">{ch.stats.max.toFixed(0)}</div></div>
+                      <div className="text-center"><div className="text-slate-400">Avg</div><div className="font-bold text-slate-800">{ch.stats.avg.toFixed(0)}</div></div>
+                      <div className="text-center"><div className="text-slate-400">Last</div><div className="font-bold text-slate-800">{ch.stats.last.toFixed(0)}</div></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* VL53L1X Card */}
+            <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-4 h-4 text-amber-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-950">VL53L1X Time-of-Flight Distance Sensor</h3>
+                    <p className="text-[10.5px] text-slate-400">1 feature · Distance_mm · Measurement-position validation (valid: {VL53L1X_VALID_MIN}–{VL53L1X_VALID_MAX} mm)</p>
+                  </div>
+                </div>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border self-start sm:self-auto ${
+                  distValidity === 'ALL IN RANGE'
+                    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                    : distValidity === 'OUT OF RANGE'
+                    ? 'text-rose-700 bg-rose-50 border-rose-200'
+                    : 'text-amber-700 bg-amber-50 border-amber-200'
+                }`}>
+                  {distValidity}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="md:col-span-2 space-y-1">
+                  <div className="text-[10.5px] font-semibold text-slate-500">Distance_mm — Sample 1→{liveRawSamples.length}</div>
+                  <div className="bg-white/60 rounded-2xl p-3 border border-slate-200/60">
+                    <MiniLineChart
+                      data={distValues}
+                      color="#d97706"
+                      refMin={VL53L1X_VALID_MIN}
+                      refMax={VL53L1X_VALID_MAX}
+                      height={72}
+                    />
+                  </div>
+                  <div className="text-[9.5px] text-slate-400 flex items-center gap-1">
+                    <div className="w-3 h-1 bg-emerald-400/40 border border-emerald-400 rounded" />
+                    Green band = valid measurement-position range ({VL53L1X_VALID_MIN}–{VL53L1X_VALID_MAX} mm)
+                  </div>
+                </div>
+                <div className="space-y-2 p-4 rounded-2xl bg-white/60 border border-slate-200/60 text-xs self-start">
+                  <div className="font-bold text-slate-800 text-[11px]">Distance Statistics</div>
+                  <StatRow label="Current (last)" value={distStats.last.toFixed(1)} unit=" mm" />
+                  <StatRow label="Min" value={distStats.min.toFixed(1)} unit=" mm" />
+                  <StatRow label="Max" value={distStats.max.toFixed(1)} unit=" mm" />
+                  <StatRow label="Average" value={distStats.avg.toFixed(1)} unit=" mm" />
+                  <StatRow label="Std Dev" value={distStats.std.toFixed(1)} unit=" mm" />
+                  <div className="pt-1 border-t border-slate-200/60">
+                    <StatRow label="In range" value={`${distInRange}/${distValues.length}`} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[10.5px] text-slate-500 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                VL53L1X is used only for measurement-position/distance consistency validation. It does not directly identify biological characteristics.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 3 — SENSOR HEALTH                               */}
+      {/* ======================================================== */}
+      <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200/60 pb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <ShieldCheck className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-950">Sensor Health</h3>
+              <p className="text-[10.5px] text-slate-400">Status inferred from latest raw sample data</p>
+            </div>
+          </div>
+          {liveRawSamples.length === 0 && (
+            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">NO DATA</span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { name: 'AS7341', sub: 'Spectral 10-ch', healthy: as7341Healthy, icon: <Radio className="w-4 h-4" />, color: 'cyan' },
+            { name: 'TCS34725', sub: 'RGB Color 4-ch', healthy: tcsHealthy, icon: <Sliders className="w-4 h-4" />, color: 'purple' },
+            { name: 'VL53L1X', sub: 'ToF Distance', healthy: vlHealthy, icon: <Gauge className="w-4 h-4" />, color: 'amber' },
+          ].map((s) => (
+            <div key={s.name} className={`p-4 rounded-2xl border flex items-center justify-between ${
+              liveRawSamples.length === 0
+                ? 'bg-slate-50 border-slate-200'
+                : s.healthy
+                ? 'bg-emerald-50/60 border-emerald-200'
+                : 'bg-rose-50/60 border-rose-200'
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <div className={`text-${s.color}-600`}>{s.icon}</div>
+                <div>
+                  <div className="font-bold text-slate-900 text-xs">{s.name}</div>
+                  <div className="text-[10px] text-slate-400">{s.sub}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${
+                  liveRawSamples.length === 0 ? 'bg-slate-300' : s.healthy ? 'bg-emerald-500' : 'bg-rose-500'
+                }`} />
+                <span className={`text-[10.5px] font-bold ${
+                  liveRawSamples.length === 0 ? 'text-slate-400' : s.healthy ? 'text-emerald-700' : 'text-rose-700'
+                }`}>
+                  {liveRawSamples.length === 0 ? 'NO DATA' : s.healthy ? 'NORMAL' : 'ALERT'}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {liveRawSamples.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
+            <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 space-y-0.5">
+              <div className="text-slate-400 text-[10px]">Sample Completion</div>
+              <div className="font-bold text-slate-950">{liveRawSamples.length} / {liveMeasurement?.sample_count ?? 20}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 space-y-0.5">
+              <div className="text-slate-400 text-[10px]">Invalid Readings</div>
+              <div className="font-bold text-slate-950">
+                {liveRawSamples.filter(s => s.vl53l1x_distance_mm < VL53L1X_VALID_MIN || s.vl53l1x_distance_mm > VL53L1X_VALID_MAX).length} / {liveRawSamples.length}
+              </div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 space-y-0.5">
+              <div className="text-slate-400 text-[10px]">I2C Bus</div>
+              <div className="font-bold text-slate-950">{as7341Healthy && tcsHealthy && vlHealthy ? 'OK' : 'CHECK'}</div>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 space-y-0.5">
+              <div className="text-slate-400 text-[10px]">Missing Values</div>
+              <div className="font-bold text-slate-950">0</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 4 — IoT → ML PROCESSING PIPELINE                */}
+      {/* ======================================================== */}
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/60 pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
+              <Workflow className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-950">IoT → ML Processing Pipeline</h3>
+              <p className="text-xs text-slate-500">End-to-end flow from ESP32-S3 hardware to SVM prediction</p>
+            </div>
+          </div>
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
+            Full Stack
+          </span>
+        </div>
+
+        {/* Pipeline visual */}
+        <div className="overflow-x-auto">
+          <div className="flex items-start gap-0 min-w-[560px]">
+            {[
+              { icon: <Cpu className="w-4 h-4" />, label: 'ESP32-S3', sub: 'MCU', active: true },
+              { icon: <Radio className="w-4 h-4" />, label: 'AS7341', sub: '10 ch', active: true },
+              { icon: <Sliders className="w-4 h-4" />, label: 'TCS34725', sub: '4 ch', active: true },
+              { icon: <Gauge className="w-4 h-4" />, label: 'VL53L1X', sub: '1 ch', active: true },
+              { icon: <Layers className="w-4 h-4" />, label: '20 Samples', sub: 'avg→1 vec', active: liveRawSamples.length > 0 },
+              { icon: <Database className="w-4 h-4" />, label: 'Supabase', sub: 'Backend', active: backendStatus === 'online' },
+              { icon: <Binary className="w-4 h-4" />, label: 'StandardScaler', sub: 'Normalize', active: !!livePrediction },
+              { icon: <Zap className="w-4 h-4" />, label: 'SVM v1.0', sub: 'Linear C=1', active: !!livePrediction },
+              { icon: <Eye className="w-4 h-4" />, label: 'Prediction', sub: 'Class A/B/C', active: !!livePrediction, last: true },
+            ].map((step, i, arr) => (
+              <div key={i} className="flex items-center flex-1 min-w-0">
+                <div className="flex flex-col items-center gap-1 flex-1">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${
+                    step.active ? 'bg-slate-950 border-slate-950 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400'
+                  }`}>
+                    {step.icon}
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-[10px] font-bold ${step.active ? 'text-slate-950' : 'text-slate-400'}`}>{step.label}</div>
+                    <div className="text-[9px] text-slate-400">{step.sub}</div>
+                  </div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div className={`h-px flex-1 mx-1 transition-all ${step.active ? 'bg-slate-950' : 'bg-slate-200'}`} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Sensor fusion summary cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-slate-950">
+              <Radio className="w-4 h-4 text-cyan-600" />AS7341
+            </div>
+            <p className="text-[11px] text-slate-500">Optical spectral bands: F1 (415nm) to F8 (680nm), Clear, NIR (910nm).</p>
+            <div className="font-mono text-[10px] text-slate-400 border-t border-slate-200/60 pt-1">10 Spectral Features</div>
+          </div>
+          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-slate-950">
+              <Sliders className="w-4 h-4 text-purple-600" />TCS34725
+            </div>
+            <p className="text-[11px] text-slate-500">Chromatic coordinates: Red, Green, Blue, and Clear irradiance channels.</p>
+            <div className="font-mono text-[10px] text-slate-400 border-t border-slate-200/60 pt-1">4 Color Features</div>
+          </div>
+          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-slate-950">
+              <Gauge className="w-4 h-4 text-amber-600" />VL53L1X
+            </div>
+            <p className="text-[11px] text-slate-500">Time-of-Flight ranging for measurement-position check (35–50 mm).</p>
+            <div className="font-mono text-[10px] text-slate-400 border-t border-slate-200/60 pt-1">1 Distance Feature</div>
+          </div>
+          <div className="p-4 rounded-2xl bg-slate-950 text-white space-y-1.5">
+            <div className="font-bold flex items-center gap-1.5">
+              <Binary className="w-4 h-4 text-emerald-400" />15-D Vector
+            </div>
+            <p className="text-[11px] text-slate-300">StandardScaler normalized array → Linear SVM Decision Function.</p>
+            <div className="text-[10px] text-slate-400 border-t border-slate-800 pt-1">3 Discrete Classes Output</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 5 + 6 — LATEST ML PREDICTION & AI INSIGHT       */}
+      {/* ======================================================== */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Latest ML Prediction (7 cols) */}
+        <div className="lg:col-span-7 glass-panel p-6 sm:p-7 rounded-3xl border border-white/85 shadow-sm space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-200/60 pb-3.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
+                <Zap className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-950">Latest ML Prediction</h3>
+                <p className="text-[10.5px] text-slate-400">SVM classification result from backend</p>
+              </div>
+            </div>
+            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${
+              liveMeasurement?.data_source === 'iot_real'
+                ? 'text-blue-700 bg-blue-50 border-blue-200'
+                : 'text-slate-700 bg-slate-100 border-slate-200'
+            }`}>
+              {liveMeasurement?.data_source === 'iot_real' ? 'IoT REAL' : 'SYNTHETIC / SIMULATION'}
+            </span>
+          </div>
+
+          {liveLoading ? (
+            <CardSkeleton />
+          ) : !livePrediction ? (
+            <div className="py-8 text-center space-y-2">
+              <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="text-sm font-semibold text-slate-500">No prediction available</p>
+              <p className="text-xs text-slate-400">Run a measurement to generate a prediction.</p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Predicted class hero */}
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-slate-950 text-white flex items-center justify-center shadow-md">
+                  <span className="text-xl font-black">{livePrediction.prediction?.replace(/class\s*/i, '').toUpperCase() || '?'}</span>
+                </div>
+                <div>
+                  <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Predicted Class</div>
+                  <div className="text-2xl font-black text-slate-950 tracking-tight">{livePrediction.prediction}</div>
+                  <div className="text-sm font-semibold text-emerald-600">{predConf}% confidence</div>
+                </div>
+              </div>
+
+              {/* Probability bars */}
+              {(pA != null || pB != null || pC != null) && (
+                <div className="space-y-2">
+                  <div className="text-[10.5px] font-bold text-slate-600 uppercase tracking-wider">Class Probabilities</div>
+                  {[
+                    { label: 'Class A', val: pA },
+                    { label: 'Class B', val: pB },
+                    { label: 'Class C', val: pC },
+                  ].filter(c => c.val != null).map((c) => (
+                    <div key={c.label} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={`font-semibold ${livePrediction.prediction === c.label ? 'text-slate-950' : 'text-slate-500'}`}>{c.label}</span>
+                        <span className={`font-mono font-bold ${livePrediction.prediction === c.label ? 'text-slate-950' : 'text-slate-400'}`}>{c.val}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${livePrediction.prediction === c.label ? 'bg-slate-950' : 'bg-slate-300'}`}
+                          style={{ width: `${c.val}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Meta info */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-2 border-t border-slate-200/60">
+                <div className="p-2.5 rounded-xl bg-white/60 border border-slate-200/60">
+                  <div className="text-slate-400 text-[10px]">Model</div>
+                  <div className="font-bold text-slate-950">{livePrediction.model_version || 'SVM-v1.0'}</div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white/60 border border-slate-200/60">
+                  <div className="text-slate-400 text-[10px]">Features</div>
+                  <div className="font-bold text-slate-950">15</div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white/60 border border-slate-200/60">
+                  <div className="text-slate-400 text-[10px]">Samples</div>
+                  <div className="font-bold text-slate-950">{liveMeasurement?.sample_count ?? 20}</div>
+                </div>
+                {livePrediction.processing_time_ms && (
+                  <div className="p-2.5 rounded-xl bg-white/60 border border-slate-200/60">
+                    <div className="text-slate-400 text-[10px]">Infer Time</div>
+                    <div className="font-bold text-slate-950">{livePrediction.processing_time_ms}ms</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* AI / Model Insight (5 cols) */}
+        <div className="lg:col-span-5 glass-panel p-6 sm:p-7 rounded-3xl border border-white/85 shadow-sm space-y-4">
+          <div className="flex items-center gap-2.5 border-b border-slate-200/60 pb-3.5">
+            <div className="w-7 h-7 rounded-full bg-purple-50 text-purple-700 flex items-center justify-center">
+              <Sparkles className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-950">Model Insight</h3>
+              <p className="text-[10.5px] text-slate-400">Deterministic analysis from SVM outputs</p>
+            </div>
+          </div>
+
+          {liveLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(4)].map((_, i) => <div key={i} className={`h-3 bg-slate-200 rounded-full ${i === 3 ? 'w-2/3' : 'w-full'}`} />)}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {insightLines.map((line, i) => (
+                <div key={i} className={`p-3 rounded-xl text-[11px] leading-relaxed ${
+                  line.startsWith('⚠')
+                    ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                    : i === 0
+                    ? 'bg-slate-50 border border-slate-200 text-slate-800 font-medium'
+                    : 'text-slate-600'
+                }`}>
+                  {line}
+                </div>
+              ))}
+
+              <div className="pt-2 border-t border-slate-200/60 text-[10px] text-slate-400 leading-relaxed flex items-start gap-1.5">
+                <Info className="w-3 h-3 shrink-0 mt-0.5" />
+                Class labels (A/B/C) are research-defined target categories. No biological identity, race, or medical claims are made.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* DIVIDER — Research Evaluation Below                      */}
+      {/* ======================================================== */}
+      <div className="flex items-center gap-3 py-2">
+        <div className="flex-1 h-px bg-slate-200/70" />
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950 text-white text-[10.5px] font-semibold shadow-xs">
+          <FlaskConical className="w-3 h-3" />
+          SVM Research Evaluation
+        </div>
+        <div className="flex-1 h-px bg-slate-200/70" />
+      </div>
+
+      {/* ======================================================== */}
+      {/* SECTION 7: SVM MODEL PERFORMANCE BENCHMARKS              */}
       {/* ======================================================== */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -285,10 +1291,10 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SECTION 2 & 3: CONFUSION MATRIX & CLASSIFICATION REPORT  */}
+      {/* SECTION 8 & 9: CONFUSION MATRIX & CLASSIFICATION REPORT  */}
       {/* ======================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Confusion Matrix (7 cols) */}
+        {/* Confusion Matrix (6 cols) */}
         <div className="lg:col-span-6 glass-panel p-6 sm:p-7 rounded-3xl border border-white/85 shadow-sm space-y-5">
           <div className="flex items-center justify-between border-b border-slate-200/60 pb-3.5">
             <div className="flex items-center gap-2.5">
@@ -455,7 +1461,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SECTION 4: FEATURE IMPORTANCE (PERMUTATION IMPORTANCE)   */}
+      {/* SECTION 10: FEATURE IMPORTANCE (PERMUTATION IMPORTANCE)  */}
       {/* ======================================================== */}
       <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/60 pb-4">
@@ -512,7 +1518,7 @@ export default function AnalyticsPage() {
         {/* 15 Feature Horizontal Bar Chart */}
         <div className="space-y-2.5 pt-2">
           {FEATURE_IMPORTANCE_DATA.map((item) => {
-            const maxVal = 15; // normalize bar width against 15%
+            const maxVal = 15;
             const widthPct = Math.min(100, Math.max(2, (Math.abs(item.importance) / maxVal) * 100));
 
             return (
@@ -562,106 +1568,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SECTION 5: MULTI-SENSOR FUSION FLOW & CARD               */}
-      {/* ======================================================== */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/60 pb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
-              <Workflow className="w-3.5 h-3.5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-950">Multi-Sensor Fusion Architecture</h3>
-              <p className="text-xs text-slate-500">Integration of 15 features across 3 discrete hardware sensors</p>
-            </div>
-          </div>
-          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
-            15 Canonical Dimensions
-          </span>
-        </div>
-
-        {/* Fusion Cards Flow */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
-          {/* Sensor 1: AS7341 */}
-          <div className="p-5 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-slate-950">
-                <Radio className="w-4 h-4 text-cyan-600" />
-                <span>AS7341</span>
-              </div>
-              <span className="text-[10px] font-bold text-cyan-800 bg-cyan-50 px-2 py-0.5 rounded-full border border-cyan-200">
-                10 Features
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Optical spectral bands: F1 (415nm) to F8 (680nm), Clear, NIR (910nm).
-            </p>
-            <div className="text-[10px] font-mono text-slate-400 border-t border-slate-200/60 pt-1.5">
-              10 Spectral Features
-            </div>
-          </div>
-
-          {/* Sensor 2: TCS34725 */}
-          <div className="p-5 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-slate-950">
-                <Sliders className="w-4 h-4 text-purple-600" />
-                <span>TCS34725</span>
-              </div>
-              <span className="text-[10px] font-bold text-purple-800 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                4 Features
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Chromatic coordinates: Red, Green, Blue, and Clear irradiance channels.
-            </p>
-            <div className="text-[10px] font-mono text-slate-400 border-t border-slate-200/60 pt-1.5">
-              4 Color Features
-            </div>
-          </div>
-
-          {/* Sensor 3: VL53L1X */}
-          <div className="p-5 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-slate-950">
-                <Gauge className="w-4 h-4 text-amber-600" />
-                <span>VL53L1X</span>
-              </div>
-              <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                1 Feature
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Time-of-Flight ranging focal check: Distance_mm (target 35-50 mm).
-            </p>
-            <div className="text-[10px] font-mono text-slate-400 border-t border-slate-200/60 pt-1.5">
-              1 Distance Feature
-            </div>
-          </div>
-
-          {/* Combined Fusion Vector Output */}
-          <div className="p-5 rounded-2xl bg-slate-950 text-white space-y-2 text-xs shadow-md">
-            <div className="flex items-center justify-between">
-              <div className="font-bold flex items-center gap-1.5">
-                <Binary className="w-4 h-4 text-emerald-400" />
-                <span>15-D Vector</span>
-              </div>
-              <span className="text-[9.5px] font-semibold text-emerald-300 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full">
-                Fused
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              StandardScaler normalized array fed directly into Linear SVM Decision Function.
-            </p>
-            <div className="text-[10px] text-slate-400 border-t border-slate-800 pt-1.5">
-              3 Discrete Classes Output
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ======================================================== */}
-      {/* SECTION 6: ABLATION STUDY (PERFORMANCE BY SENSOR CONFIG) */}
+      {/* SECTION 11: SENSOR ABLATION STUDY                        */}
       {/* ======================================================== */}
       <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/60 pb-4">
@@ -760,7 +1667,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SECTION 7: DATASET OVERVIEW & DATA QUALITY AUDIT         */}
+      {/* SECTION 12 & 13: DATASET OVERVIEW & LEAKAGE AUDIT       */}
       {/* ======================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Dataset Distribution (6 cols) */}
@@ -846,7 +1753,7 @@ export default function AnalyticsPage() {
                 <Lock className="w-3.5 h-3.5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-950">Data Quality &amp; Leakage Audit</h3>
+                <h3 className="text-sm font-bold text-slate-950">Data Quality & Leakage Audit</h3>
                 <p className="text-[10.5px] text-slate-400">Strict evaluation integrity checks</p>
               </div>
             </div>
@@ -907,7 +1814,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SECTION 8: LIVE SYSTEM PREDICTION TELEMETRY & STATS      */}
+      {/* SECTION 14: LIVE SYSTEM PREDICTION TELEMETRY & STATS     */}
       {/* ======================================================== */}
       <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-200/60 pb-4">
@@ -916,10 +1823,10 @@ export default function AnalyticsPage() {
               <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
                 <PieChart className="w-3.5 h-3.5" />
               </div>
-              <h3 className="text-base font-bold text-slate-950">Live System Prediction Analytics</h3>
+              <h3 className="text-base font-bold text-slate-950">Live Prediction Analytics</h3>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Real-time measurement records stored in Supabase database from active IoT node acquisitions.
+              Measurement records from active IoT and synthetic acquisitions stored in Supabase.
             </p>
           </div>
           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 uppercase self-start sm:self-auto shadow-2xs">
@@ -1057,7 +1964,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
-      {/* SECTION 9: MODEL CONFIGURATION SPECIFICATIONS            */}
+      {/* SECTION 15: MODEL CONFIGURATION SPECIFICATIONS           */}
       {/* ======================================================== */}
       <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-5">
         <div className="flex items-center justify-between border-b border-slate-200/60 pb-3.5">

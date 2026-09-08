@@ -30,10 +30,6 @@ export class AnalyticsService {
   }
 
   static async getDataSourceStats() {
-    const { data } = await supabaseAdmin
-      .from('measurements')
-      .select('data_source, quality, status');
-
     const result = {
       synthetic: 0,
       iot_real: 0,
@@ -42,18 +38,38 @@ export class AnalyticsService {
       quality_poor: 0,
     };
 
-    if (data) {
-      for (const row of data) {
-        if (row.data_source === 'iot_real') {
-          result.iot_real++;
-        } else {
-          result.synthetic++;
-        }
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('measurements')
+        .select('data_source, quality, status');
 
-        if (row.quality === 'WARNING') result.quality_warning++;
-        else if (row.quality === 'POOR') result.quality_poor++;
-        else result.quality_good++;
+      if (!error && data) {
+        for (const row of data) {
+          if (row.data_source === 'iot_real') {
+            result.iot_real++;
+          } else {
+            result.synthetic++;
+          }
+
+          if (row.quality === 'WARNING') result.quality_warning++;
+          else if (row.quality === 'POOR') result.quality_poor++;
+          else result.quality_good++;
+        }
+        return result;
       }
+    } catch {
+      // ignore column error if migration not applied yet
+    }
+
+    // Safe fallback: all existing measurements in software-only stage are synthetic
+    try {
+      const { count } = await supabaseAdmin
+        .from('measurements')
+        .select('*', { count: 'exact', head: true });
+      result.synthetic = count || 0;
+      result.quality_good = count || 0;
+    } catch {
+      // ignore
     }
 
     return result;

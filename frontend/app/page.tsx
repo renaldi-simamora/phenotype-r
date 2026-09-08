@@ -134,13 +134,13 @@ export default function LandingPage() {
                     <Cpu className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-950">PHENONODE Core Unit</h3>
+                    <h3 className="text-sm font-bold text-slate-950">PHENOTYPE Core Unit</h3>
                     <p className="text-[11px] text-slate-500">ESP32-S3 Dual-Core 240MHz · Node A</p>
                   </div>
                 </div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Online
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200 text-xs font-semibold shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-slate-400" />
+                  Simulation Ready
                 </span>
               </div>
 
@@ -389,7 +389,7 @@ export default function LandingPage() {
               Multi-Sensor Fusion & Intelligent Alignment
             </h2>
             <p className="text-sm text-slate-600 leading-relaxed">
-              PHENONODE fuses spectral optical channels, chromatic coordinate vectors, and laser distance telemetry to eliminate spatial positioning errors.
+              PHENOTYPE fuses spectral optical channels, chromatic coordinate vectors, and laser distance telemetry to eliminate spatial positioning errors.
             </p>
 
             <div className="space-y-4">
@@ -502,7 +502,7 @@ export default function LandingPage() {
       <section className="py-24 px-6 lg:px-12 text-center relative overflow-hidden">
         <div className="max-w-3xl mx-auto space-y-6">
           <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-950">
-            Ready to explore PHENONODE?
+            Ready to explore PHENOTYPE?
           </h2>
           <p className="text-sm sm:text-base text-slate-600 leading-relaxed max-w-xl mx-auto">
             Access the measurement console to initialize sensor nodes, conduct live calibration, and inspect machine learning evaluations.

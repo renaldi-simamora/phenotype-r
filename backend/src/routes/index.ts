@@ -23,7 +23,7 @@ router.use('/audit-logs', auditLogRoutes);
 router.get('/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'PHENONODE API is healthy',
+    message: 'PHENOTYPE API is healthy',
     data: {
       status: 'UP',
       timestamp: new Date().toISOString(),

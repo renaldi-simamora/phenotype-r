@@ -87,7 +87,7 @@ export default function LoginPage() {
             <div className="w-5 h-5 rounded-full bg-slate-950 flex items-center justify-center text-white">
               <Cpu className="w-3 h-3" />
             </div>
-            <span>PHENONODE.</span>
+            <span>PHENOTYPE.</span>
           </Link>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 pt-2">
             Sign in to Console
@@ -140,7 +140,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="operator@phenonode.edu"
+                  placeholder="operator@phenotype.edu"
                   className="w-full pl-11 pr-4 py-3 text-xs rounded-2xl bg-white/80 border border-slate-200/80 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-slate-900 focus:bg-white transition-all shadow-2xs"
                 />
               </div>

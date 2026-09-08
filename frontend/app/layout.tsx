@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'PHENONODE | Multi-Sensor IoT & SVM Intelligence',
+  title: 'PHENOTYPE | Multi-Sensor IoT & SVM Intelligence',
   description: 'Multi-Sensor IoT Measurement Platform with Integrated Machine Learning Classification',
 };
 

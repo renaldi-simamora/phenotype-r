@@ -1,85 +1,54 @@
 import { supabaseAdmin } from '../config/supabase';
 import { RawSensorSample } from '../types';
+import { logger } from '../utils/logger';
 
 export class RawSampleRepository {
   /**
-   * Save a batch of raw sensor samples (1 to 20 samples) for a measurement.
-   * Dual-stores in public.raw_samples and public.sensor_readings for safety.
+   * Save 20 raw sensor samples for a measurement directly in public.sensor_readings
+   * under sensor_type='RAW_SAMPLES_20' and payload_json={count: 20, samples: [...]}.
    */
   static async insertBatch(samples: RawSensorSample[]): Promise<RawSensorSample[]> {
     if (!samples || samples.length === 0) return [];
 
-    let insertedSamples: RawSensorSample[] = [];
-    let dbSuccess = false;
-
-    try {
-      const { data, error } = await supabaseAdmin
-        .from('raw_samples')
-        .insert(samples)
-        .select();
-
-      if (!error && data) {
-        insertedSamples = data as RawSensorSample[];
-        dbSuccess = true;
-      } else if (error) {
-        console.warn('[RawSampleRepository.insertBatch] raw_samples table notice:', error.message);
-      }
-    } catch (err) {
-      console.warn('[RawSampleRepository.insertBatch] Exception writing to raw_samples:', err);
-    }
-
-    // Dual-storage backup in sensor_readings ensures raw research data is NEVER lost
     const measurementId = samples[0]?.measurement_id;
-    if (measurementId) {
-      try {
-        await supabaseAdmin.from('sensor_readings').insert({
-          measurement_id: measurementId,
-          sensor_type: 'RAW_SAMPLES_20',
-          payload_json: { samples, count: samples.length },
-          recorded_at: new Date().toISOString(),
-        });
-      } catch (backupErr) {
-        console.error('[RawSampleRepository] sensor_readings backup error:', backupErr);
-      }
+    if (!measurementId) return samples;
+
+    const { error } = await supabaseAdmin.from('sensor_readings').insert({
+      measurement_id: measurementId,
+      sensor_type: 'RAW_SAMPLES_20',
+      payload_json: { count: samples.length, samples },
+      recorded_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      logger.error(`[RawSampleRepository.insertBatch] Error saving samples to sensor_readings: ${error.message}`);
+      throw error;
     }
 
-    return dbSuccess ? insertedSamples : samples;
+    return samples;
   }
 
   /**
-   * Retrieve all 20 raw samples for a specific measurement, ordered by sample_number.
+   * Retrieve all 20 raw samples for a specific measurement from sensor_readings.
    */
   static async findByMeasurementId(measurementId: string): Promise<RawSensorSample[]> {
     try {
       const { data, error } = await supabaseAdmin
-        .from('raw_samples')
-        .select('*')
-        .eq('measurement_id', measurementId)
-        .order('sample_number', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        return data as RawSensorSample[];
-      }
-    } catch (err) {
-      console.warn('[RawSampleRepository.findByMeasurementId] raw_samples error, trying backup:', err);
-    }
-
-    // Fallback: check sensor_readings backup
-    try {
-      const { data: srData } = await supabaseAdmin
         .from('sensor_readings')
-        .select('*')
+        .select('payload_json')
         .eq('measurement_id', measurementId)
         .eq('sensor_type', 'RAW_SAMPLES_20')
         .order('recorded_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (srData?.payload_json?.samples && Array.isArray(srData.payload_json.samples)) {
-        return srData.payload_json.samples as RawSensorSample[];
+      if (!error && data?.payload_json?.samples && Array.isArray(data.payload_json.samples)) {
+        return (data.payload_json.samples as RawSensorSample[]).sort(
+          (a, b) => a.sample_number - b.sample_number
+        );
       }
-    } catch (srErr) {
-      console.error('[RawSampleRepository] Fallback sensor_readings query failed:', srErr);
+    } catch (err) {
+      logger.error(`[RawSampleRepository.findByMeasurementId] Query failed for ${measurementId}:`, err);
     }
 
     return [];
@@ -93,80 +62,53 @@ export class RawSampleRepository {
 
     try {
       const { data, error } = await supabaseAdmin
-        .from('raw_samples')
-        .select('*')
-        .in('measurement_id', measurementIds)
-        .order('sample_number', { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        return data as RawSensorSample[];
-      }
-    } catch (err) {
-      console.warn('[RawSampleRepository.findByMeasurementIds] Query error:', err);
-    }
-
-    // Fallback from sensor_readings
-    const results: RawSensorSample[] = [];
-    try {
-      const { data: srList } = await supabaseAdmin
         .from('sensor_readings')
-        .select('*')
+        .select('payload_json')
         .in('measurement_id', measurementIds)
         .eq('sensor_type', 'RAW_SAMPLES_20');
 
-      if (srList) {
-        for (const row of srList) {
+      if (!error && data) {
+        const results: RawSensorSample[] = [];
+        for (const row of data) {
           if (row.payload_json?.samples && Array.isArray(row.payload_json.samples)) {
             results.push(...(row.payload_json.samples as RawSensorSample[]));
           }
         }
+        return results;
       }
-    } catch (srErr) {
-      console.error('[RawSampleRepository] Batch fallback query failed:', srErr);
+    } catch (err) {
+      logger.error('[RawSampleRepository.findByMeasurementIds] Query failed:', err);
     }
 
-    return results;
+    return [];
   }
 
   /**
-   * Retrieve all raw samples with optional limit for global raw export.
+   * Retrieve raw samples for global raw export.
    */
   static async findAll(limit = 2000): Promise<RawSensorSample[]> {
     try {
       const { data, error } = await supabaseAdmin
-        .from('raw_samples')
-        .select('*')
-        .order('timestamp', { ascending: false })
-        .limit(limit);
-
-      if (!error && data && data.length > 0) {
-        return data as RawSensorSample[];
-      }
-    } catch (err) {
-      console.warn('[RawSampleRepository.findAll] raw_samples error, checking backup:', err);
-    }
-
-    // Fallback from sensor_readings
-    const results: RawSensorSample[] = [];
-    try {
-      const { data: srList } = await supabaseAdmin
         .from('sensor_readings')
-        .select('*')
+        .select('payload_json')
         .eq('sensor_type', 'RAW_SAMPLES_20')
         .order('recorded_at', { ascending: false })
         .limit(Math.ceil(limit / 20));
 
-      if (srList) {
-        for (const row of srList) {
+      if (!error && data) {
+        const results: RawSensorSample[] = [];
+        for (const row of data) {
           if (row.payload_json?.samples && Array.isArray(row.payload_json.samples)) {
             results.push(...(row.payload_json.samples as RawSensorSample[]));
           }
         }
+        return results;
       }
-    } catch (srErr) {
-      console.error('[RawSampleRepository.findAll] Backup query failed:', srErr);
+    } catch (err) {
+      logger.error('[RawSampleRepository.findAll] Query failed:', err);
     }
 
-    return results;
+    return [];
   }
 }
+

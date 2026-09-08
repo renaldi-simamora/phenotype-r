@@ -191,30 +191,17 @@ export default function MeasurementPage() {
           if (procRes.data.predictionResult) {
             setPrediction(procRes.data.predictionResult as MlPrediction);
           }
+        } else {
+          throw new Error(procRes.message || 'Failed to process sensor measurement in backend');
         }
-      } catch {
-        // Fallback default SVM prediction
-        setPrediction({
-          id: `pred-${Date.now()}`,
-          measurement_id: measurement?.id || 'MEAS-00001',
-          model_name: 'SVM-Classifier',
-          model_version: 'SVM-v1.0',
-          prediction: 'Class_C',
-          confidence: 0.7624,
-          processing_time_ms: 145,
-          created_at: new Date().toISOString(),
-          probabilities: {
-            Class_A: 0.0498,
-            Class_B: 0.1878,
-            Class_C: 0.7624,
-          },
-        });
-      }
 
-      // Step 5: Completed
-      if (timerRef.current) clearInterval(timerRef.current);
-      setStep('COMPLETED');
-      setProgress(100);
+        // Step 5: Completed
+        if (timerRef.current) clearInterval(timerRef.current);
+        setStep('COMPLETED');
+        setProgress(100);
+      } catch (procErr) {
+        throw procErr;
+      }
     } catch (err: unknown) {
       if (timerRef.current) clearInterval(timerRef.current);
       setError(err instanceof Error ? err.message : 'Measurement session failed');
@@ -449,17 +436,17 @@ export default function MeasurementPage() {
             <div className="p-6 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2">
               <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Identified Classification</div>
               <div className="text-4xl font-black tracking-tight text-slate-950">
-                {prediction?.prediction?.replace('_', ' ') || 'Class C'}
+                {prediction?.prediction?.replace('_', ' ') || '—'}
               </div>
               <div className="text-[11px] text-slate-500">
-                Processed with calibrated RBF SVM model using 15 aggregated spectral-color-distance features.
+                Processed with calibrated Linear SVM model (C=1.0) using 15 aggregated spectral-color-distance features.
               </div>
             </div>
 
             <div className="p-6 rounded-2xl bg-white/70 border border-slate-200/70 space-y-2">
               <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Confidence Score</div>
               <div className="text-4xl font-black tracking-tight text-slate-950">
-                {prediction ? `${(prediction.confidence * 100).toFixed(2)}%` : '76.24%'}
+                {prediction ? `${(prediction.confidence * 100).toFixed(2)}%` : '—'}
               </div>
               <div className="text-[11px] text-slate-500">
                 Calibrated posterior probability from SVM decision hyperplanes.

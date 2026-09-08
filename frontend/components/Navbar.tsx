@@ -15,7 +15,7 @@ export function Navbar() {
         {/* Brand Logo */}
         <Link href="/" className="flex items-center gap-2 group">
           <span className="text-xl font-bold tracking-tight text-slate-900 font-sans">
-            PHENONODE<span className="text-emerald-500">.</span>
+            PHENOTYPE<span className="text-emerald-500">.</span>
           </span>
         </Link>
 
