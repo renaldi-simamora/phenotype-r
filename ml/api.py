@@ -32,9 +32,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
+LABEL_SEMANTICS = "synthetic_research_labels"
+LABEL_DISCLAIMER = (
+    "Class_A/Class_B/Class_C are synthetic research/simulation labels only. "
+    "They carry no biological, personality, STIFIn, or assessment meaning, "
+    "and their relationship to any scanner output is not established."
+)
+
 app = FastAPI(
     title="PhenoNode SVM ML Service",
-    description="Machine Learning Inference Service for Multi-Sensor Phenotype Classification",
+    description=(
+        "Machine Learning Inference Service for Multi-Sensor Phenotype Classification. "
+        "Class_A/Class_B/Class_C are synthetic research/simulation labels only."
+    ),
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -68,6 +78,7 @@ class PredictResponse(BaseModel):
     confidence: float
     probabilities: Optional[Dict[str, float]] = None
     model_version: str
+    label_semantics: str = LABEL_SEMANTICS
 
 
 @app.get("/health")
@@ -78,6 +89,8 @@ def health():
         "model_loaded": predictor is not None and predictor.pipeline is not None,
         "feature_count": len(FEATURE_ORDER),
         "features": FEATURE_ORDER,
+        "label_semantics": LABEL_SEMANTICS,
+        "label_disclaimer": LABEL_DISCLAIMER,
     }
 
 
@@ -137,6 +150,7 @@ def predict_endpoint(payload: PredictRequest):
             confidence=round(confidence, 4),
             probabilities=probabilities if isinstance(probabilities, dict) else None,
             model_version=payload.model_version or "SVM-v1.0",
+            label_semantics=LABEL_SEMANTICS,
         )
     except InputValidationError as ive:
         raise HTTPException(status_code=422, detail=f"Validation error: {str(ive)}")

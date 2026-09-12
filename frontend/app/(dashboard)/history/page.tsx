@@ -18,7 +18,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { Measurement, RawSensorSample, DataSource, MeasurementQuality } from '../../../types';
+import { AssessmentResult, Measurement, RawSensorSample, DataSource, MeasurementQuality } from '../../../types';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { TableRowSkeleton } from '../../../components/SkeletonLoader';
 import { ErrorBanner } from '../../../components/ErrorBanner';
@@ -46,11 +46,14 @@ export default function HistoryPage() {
   // Export states
   const [exportingMeasurements, setExportingMeasurements] = useState(false);
   const [exportingRaw, setExportingRaw] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfExportError, setPdfExportError] = useState<string | null>(null);
 
   // Detail Modal state
   const [selectedMeasurement, setSelectedMeasurement] = useState<Measurement | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [rawSamples, setRawSamples] = useState<RawSensorSample[]>([]);
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
   const [modalTab, setModalTab] = useState<'summary' | 'raw_samples'>('summary');
 
   const fetchMeasurements = useCallback(async () => {
@@ -100,11 +103,18 @@ export default function HistoryPage() {
   const inspectMeasurement = async (id: string) => {
     setDetailLoading(true);
     setRawSamples([]);
+    setAssessment(null);
     setModalTab('summary');
     try {
       const res = await api.measurements.getById(id);
       if (res.success && res.data) {
         setSelectedMeasurement(res.data);
+        try {
+          const assessmentRes = await api.assessments.getByMeasurementId(id);
+          if (assessmentRes.success) setAssessment(assessmentRes.data);
+        } catch {
+          setAssessment(null);
+        }
         if (res.data.raw_samples && res.data.raw_samples.length > 0) {
           setRawSamples(res.data.raw_samples);
         } else {
@@ -155,6 +165,18 @@ export default function HistoryPage() {
       alert(err instanceof Error ? err.message : 'Failed to export raw samples CSV');
     } finally {
       setExportingRaw(false);
+    }
+  };
+
+  const handleExportPdf = async (measurementId: string) => {
+    try {
+      setExportingPdf(true);
+      setPdfExportError(null);
+      await api.measurements.downloadPdf(measurementId);
+    } catch (err) {
+      setPdfExportError(err instanceof Error ? err.message : 'Failed to export PDF');
+    } finally {
+      setExportingPdf(false);
     }
   };
 
@@ -514,6 +536,15 @@ export default function HistoryPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => handleExportPdf(selectedMeasurement.id)}
+                  disabled={exportingPdf}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-950 hover:bg-slate-800 text-white font-semibold cursor-pointer shadow-sm disabled:opacity-50"
+                  title="Export measurement report as PDF"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{exportingPdf ? 'Exporting PDF...' : 'Export PDF'}</span>
+                </button>
+                <button
                   onClick={() => handleExportRawCsv(selectedMeasurement.id)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-semibold cursor-pointer shadow-2xs"
                   title="Export 20 Raw Samples as CSV"
@@ -529,6 +560,11 @@ export default function HistoryPage() {
                 </button>
               </div>
             </div>
+            {pdfExportError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {pdfExportError}
+              </div>
+            )}
 
             {/* Tabs Selector */}
             <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
@@ -618,6 +654,38 @@ export default function HistoryPage() {
                     </div>
                   </div>
                 )}
+
+                <div className="p-5 rounded-2xl bg-amber-50/70 border border-amber-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Classification Profile (Simulation)</h4>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      {assessment?.assessment.mapping_available ? 'SIMULATION MAPPING CONFIGURED' : 'MAPPING NOT CONFIGURED'}
+                    </span>
+                  </div>
+                  {assessment?.assessment.mapping_available ? (
+                    <>
+                      <div>
+                        <div className="text-[10px] uppercase font-bold text-slate-400">Simulation Profile</div>
+                        <div className="text-xl font-black text-slate-950 mt-1">{assessment.assessment.classification_profile || 'Belum tersedia'}</div>
+                        <p className="text-xs text-slate-600 mt-1">{assessment.assessment.classification_description || 'Belum tersedia'}</p>
+                        <p className="text-[11px] font-semibold text-amber-700 mt-2">{assessment.assessment.mapping_mode === 'demo' ? 'SIMULATION ONLY - not an official assessment' : `Mapping ${assessment.assessment.mapping_version}`}</p>
+                      </div>
+                      {assessment.assessment.dimensions.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{assessment.assessment.dimensions.map((dimension) => <div key={dimension.name} className="p-3 rounded-xl bg-white border border-amber-200/70"><div className="text-xs font-bold text-slate-900">{dimension.name}</div><div className="text-[11px] text-emerald-700 font-semibold mt-1">{dimension.score}/100 · {dimension.level}</div></div>)}</div>}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {assessment.assessment.characteristics.map((item) => (
+                          <div key={item.title} className="p-3 rounded-xl bg-white border border-amber-200/70">
+                            <div className="text-sm font-bold text-slate-900">{item.title}</div>
+                            {item.level && <div className="text-[11px] text-emerald-700 font-semibold mt-1">{item.level}</div>}
+                            <div className="text-xs text-slate-600 mt-1">{item.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-[10px] text-slate-500">Mapping {assessment.assessment.mapping_version} · Acquisition Version {assessment.assessment.assessment_version}</div>
+                    </>
+                  ) : (
+                    <p className="text-xs leading-relaxed text-slate-600">Simulation mapping not configured for this class. Characteristics and profiles are simulation-only interpretations and not displayed without established methodology.</p>
+                  )}
+                </div>
 
                 {/* 15 Aggregated Features Summary (Mean of 20 Samples) */}
                 <div className="space-y-4">
@@ -726,7 +794,7 @@ export default function HistoryPage() {
                       20 Raw Sensor Samples Log
                     </h4>
                     <p className="text-[11px] text-slate-500">
-                      All 15 raw sensor telemetry channels stored per sample from ESP32-S3.
+                      All 15 stored sensor channels per sample. Source may be synthetic/simulation unless otherwise recorded.
                     </p>
                   </div>
                   <button

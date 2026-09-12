@@ -9,7 +9,10 @@ export class MlController {
     try {
       const { measurementId } = req.params;
       const prediction = await MlPredictionRepository.findByMeasurementId(measurementId);
-      sendSuccess(res, 'Prediction fetched successfully', prediction);
+      // Class_A/Class_B/Class_C are synthetic research/simulation labels only.
+      sendSuccess(res, 'Prediction fetched successfully', prediction
+        ? { ...prediction, label_semantics: 'synthetic_research_labels' as const }
+        : prediction);
     } catch (error) {
       next(error);
     }

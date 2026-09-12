@@ -19,6 +19,8 @@ export interface PredictResponsePayload {
     [key: string]: number | undefined;
   };
   model_version: string;
+  // Class_A/Class_B/Class_C are synthetic research/simulation labels only.
+  label_semantics?: string;
 }
 
 export class MlService {

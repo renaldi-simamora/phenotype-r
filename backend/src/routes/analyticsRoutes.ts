@@ -12,5 +12,6 @@ router.get('/predictions', AnalyticsController.getPredictionsStats);
 router.get('/sources', AnalyticsController.getDataSourcesStats);
 router.get('/devices', AnalyticsController.getDevicesStats);
 router.get('/model-performance', AnalyticsController.getModelPerformance);
+router.get('/patterns/:measurementId', AnalyticsController.getPatternMetrics);
 
 export default router;

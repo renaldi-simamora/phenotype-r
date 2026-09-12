@@ -82,7 +82,7 @@ export default function DevicePage() {
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Device Monitoring</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Real-time status, network telemetry, and sensor module health of ESP32-S3 nodes.
+            Device registry and software-only simulation status. Live hardware telemetry is not yet integrated.
           </p>
         </div>
 
@@ -175,7 +175,7 @@ export default function DevicePage() {
                 {primaryDevice.last_seen ? formatTime(primaryDevice.last_seen) : 'No heartbeat yet'}
               </div>
               <div className="text-[10px] text-slate-500">
-                {primaryDevice.status === 'ONLINE' ? 'Heartbeat: 15s interval' : 'Hardware integration pending'}
+                {primaryDevice.status === 'ONLINE' ? 'Status reported by device registry' : 'Hardware integration pending'}
               </div>
             </div>
           </div>

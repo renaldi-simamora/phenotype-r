@@ -8,6 +8,10 @@ export type MeasurementStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCE
 export type DataSource = 'synthetic' | 'iot_real';
 export type MeasurementQuality = 'GOOD' | 'WARNING' | 'POOR';
 
+// Class_A/Class_B/Class_C are synthetic research/simulation labels only.
+// They carry no biological, personality, STIFIn, or assessment meaning.
+export type LabelSemantics = 'synthetic_research_labels';
+
 export interface Profile {
   id: string;
   auth_user_id: string;
@@ -158,6 +162,7 @@ export interface MlPrediction {
     Class_C: number;
     [key: string]: number;
   };
+  label_semantics?: LabelSemantics;
   processing_time_ms: number;
   created_at: string;
 }

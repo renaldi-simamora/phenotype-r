@@ -1,5 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { MeasurementService } from '../services/measurementService';
+import { MeasurementPdfService } from '../services/measurementPdfService';
 import { SensorRepository } from '../repositories/sensorRepository';
 import { MlPredictionRepository } from '../repositories/mlPredictionRepository';
 import { sendSuccess } from '../utils/response';
@@ -150,6 +151,17 @@ export class MeasurementController {
         `attachment; filename="raw_samples_${measurementId || 'all'}_${Date.now()}.csv"`
       );
       res.status(200).send(csvData);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async exportPdf(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const pdf = await MeasurementPdfService.generate(req.params.id);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="measurement-${req.params.id}.pdf"`);
+      res.status(200).send(pdf);
     } catch (error) {
       next(error);
     }

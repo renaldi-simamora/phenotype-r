@@ -30,10 +30,10 @@ export function Topbar({ onOpenMobile, title = 'Console', subtitle }: TopbarProp
       </div>
 
       <div className="flex items-center gap-3">
-        {/* System node indicator */}
-        <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/90 bg-white/80 backdrop-blur-md text-emerald-700 text-xs font-medium shadow-2xs">
-          <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-500" />
-          <span>ESP32 Node Online</span>
+        {/* Software-only simulation indicator (hardware not integrated) */}
+        <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-white/90 bg-white/80 backdrop-blur-md text-slate-600 text-xs font-medium shadow-2xs">
+          <Radio className="w-3.5 h-3.5 text-slate-400" />
+          <span>Software-Only Simulation</span>
         </div>
 
         {/* Quick action button */}

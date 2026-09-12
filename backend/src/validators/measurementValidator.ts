@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const createMeasurementSchema = z.object({
   user_id: z.string().uuid('user_id harus berupa UUID valid'),
   device_id: z.string().uuid('device_id harus berupa UUID valid'),
+  data_source: z.enum(['synthetic', 'iot_real']).optional(),
 });
 
 export const updateMeasurementStatusSchema = z.object({

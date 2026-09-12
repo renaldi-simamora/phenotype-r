@@ -25,6 +25,20 @@
 
 ---
 
+# 0. CURRENT PROJECT STATUS (SOFTWARE-ONLY / SIMULATION)
+
+This section describes the present, factual state. Do not present anything below as operational when it is not.
+
+- **Software-only / simulation.** The physical ESP32-S3 hardware and sensors are NOT yet integrated.
+- **Hardware integration: PENDING.** Do not claim ESP32 is online/connected, do not display real Wi-Fi status, IP address, uptime, heartbeat, or live sensor readings.
+- **Data source: SYNTHETIC / SIMULATION.** Current measurements are simulation-based unless explicitly recorded otherwise.
+- **ML scope: research/simulation.** The SVM is trained and evaluated on a synthetic dataset. The reported metrics (accuracy, precision, recall, F1) are performance against that dataset only — not biological, genetic, personality, or STIFIn validation.
+- **Class_A / Class_B / Class_C are research/simulation classification labels only.** They have no established biological, genetic, personality, STIFIn, race/ethnicity, or medical meaning.
+- **Legacy scanner output / STIFIn integration: BLOCKED / PENDING EXTERNAL REQUIREMENT.** See the "External Dependency / Blocker" section under Research Classes. Do not invent scanner output format, STIFIn API, payload schema, or mapping.
+- **Terminology preference:** use `Software-Only Simulation`, `Hardware Integration Pending`, `Simulation Ready`, `Stored Measurement` over claims implying live hardware telemetry.
+
+---
+
 # 1. PROJECT IDENTITY
 
 ## Project Name
@@ -93,6 +107,40 @@ other biological attributes
 The meaning of each class must be explicitly defined by the research methodology and supported by the actual ground-truth data used for the experiment.
 
 AI Agents MUST NOT invent or infer the meaning of Class_A, Class_B, or Class_C.
+
+Current status:
+
+```text
+Class_A/Class_B/Class_C currently function as research/simulation labels only.
+Their final semantic meaning and their relationship to the STIFIn scanner output
+have not yet been established.
+```
+
+The ML service exposes this explicitly via `label_semantics = "synthetic_research_labels"`
+on `GET /health` and `POST /predict`. These labels carry no biological, personality,
+STIFIn, or assessment meaning.
+
+## External Dependency / Blocker: STIFIn Scanner Output & Integration Contract
+
+PHENOTYPE is intended to upgrade/replace the biometric scanner currently used by STIFIn.
+The following information is NOT present in this repository and is an EXTERNAL DEPENDENCY /
+BLOCKER owned by the STIFIn party:
+
+- The output format produced by the existing STIFIn scanner (for example: image, template,
+  feature vector, fingerprint characteristics, ID, or category). Unknown.
+- The integration contract required to connect PHENOTYPE output to the existing STIFIn
+  application: endpoints, payload/schema, authentication, and data exchange format. Unknown.
+
+Constraints until the official contract is supplied:
+
+- Do NOT invent, guess, or mock any STIFIn endpoint, payload, schema, or mapping.
+- Do NOT assign any semantic meaning to Class_A/Class_B/Class_C.
+- Do NOT implement STIFIn integration.
+- The current `Class_A/Class_B/Class_C` SVM pipeline is a simulation pipeline built on
+  synthetic data; it is not the STIFIn scanner output and does not represent it.
+
+Integration will be implemented only after the STIFIn scanner output format and the
+integration contract are provided by the responsible party.
 
 # 2. HIGH-LEVEL SYSTEM ARCHITECTURE
 

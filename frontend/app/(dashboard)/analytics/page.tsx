@@ -33,7 +33,7 @@ import {
   FlaskConical,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
-import { MlModel, Measurement, MlPrediction, RawSensorSample } from '../../../types';
+import { AssessmentResult, MlModel, Measurement, MlPrediction, PatternMetrics, RawSensorSample } from '../../../types';
 import { CardSkeleton } from '../../../components/SkeletonLoader';
 import { ErrorBanner } from '../../../components/ErrorBanner';
 
@@ -244,6 +244,37 @@ function MiniLineChart({
   );
 }
 
+function SampleLineChart({ data, outliers = [], color = '#0f172a' }: { data: number[]; outliers?: number[]; color?: string }) {
+  if (!data.length) return <div className="h-24 flex items-center justify-center text-xs text-slate-400">Data tidak cukup</div>;
+  const W = 560;
+  const H = 150;
+  const pad = 12;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const x = (index: number) => pad + (index / Math.max(data.length - 1, 1)) * (W - pad * 2);
+  const y = (value: number) => H - pad - ((value - min) / range) * (H - pad * 2);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-36" role="img" aria-label="Sample trend chart">
+      <polyline points={data.map((value, index) => `${x(index)},${y(value)}`).join(' ')} fill="none" stroke={color} strokeWidth="2" />
+      {data.map((value, index) => <circle key={index} cx={x(index)} cy={y(value)} r={outliers.includes(index) ? 5 : 2.5} fill={outliers.includes(index) ? '#e11d48' : color} stroke={outliers.includes(index) ? '#fff' : 'none'} strokeWidth="2" />)}
+      <text x={pad} y={H - 1} fontSize="9" fill="#64748b">Sample 1</text>
+      <text x={W - 54} y={H - 1} fontSize="9" fill="#64748b">Sample {data.length}</text>
+    </svg>
+  );
+}
+
+function ScatterChart({ first, second }: { first: number[]; second: number[] }) {
+  if (!first.length || first.length !== second.length) return <div className="h-36 flex items-center justify-center text-xs text-slate-400">Data tidak cukup</div>;
+  const W = 560;
+  const H = 150;
+  const pad = 16;
+  const minX = Math.min(...first); const maxX = Math.max(...first); const minY = Math.min(...second); const maxY = Math.max(...second);
+  const x = (value: number) => pad + ((value - minX) / (maxX - minX || 1)) * (W - pad * 2);
+  const y = (value: number) => H - pad - ((value - minY) / (maxY - minY || 1)) * (H - pad * 2);
+  return <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-36" role="img" aria-label="Feature correlation scatter plot">{first.map((value, index) => <circle key={index} cx={x(value)} cy={y(second[index])} r="3.5" fill="#0f766e" />)}</svg>;
+}
+
 // ==========================================
 // STAT MINI ROW
 // ==========================================
@@ -336,6 +367,12 @@ export default function AnalyticsPage() {
     quality_poor: number;
   } | null>(null);
   const [ablationMetric, setAblationMetric] = useState<'macroF1' | 'accuracy'>('macroF1');
+  const [patternMetrics, setPatternMetrics] = useState<PatternMetrics | null>(null);
+  const [patternView, setPatternView] = useState<'cv' | 'outlier' | 'correlation' | 'trend' | null>(null);
+  const [sensorFilter, setSensorFilter] = useState<'ALL' | 'AS7341' | 'TCS34725' | 'VL53L1X' | 'OUTLIER'>('ALL');
+  const [sensorSort, setSensorSort] = useState<'feature' | 'cv' | 'outlier'>('feature');
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [liveAssessment, setLiveAssessment] = useState<AssessmentResult | null>(null);
 
   // ---- Live monitoring state ----
   const [liveLoading, setLiveLoading] = useState(true);
@@ -355,6 +392,12 @@ export default function AnalyticsPage() {
       setLiveMeasurement(live.measurement);
       setLiveRawSamples(live.rawSamples);
       setLivePrediction(live.prediction);
+      if (live.measurement?.id) {
+        const patternRes = await api.analytics.getPatternMetrics(live.measurement.id).catch(() => null);
+        setPatternMetrics(patternRes?.success ? patternRes.data.metrics : null);
+        const assessmentRes = await api.assessments.getByMeasurementId(live.measurement.id).catch(() => null);
+        setLiveAssessment(assessmentRes?.success ? assessmentRes.data : null);
+      }
       setLastSync(new Date());
       setBackendStatus('online');
     } catch {
@@ -452,6 +495,25 @@ export default function AnalyticsPage() {
   const activeChannelValues = liveRawSamples.map((s) => (s[activeChannel.key] as number) ?? 0);
   const activeChannelStats = calcStats(activeChannelValues);
 
+  const patternRows = patternMetrics
+    ? Object.entries(patternMetrics.channels).map(([feature, metrics]) => {
+        const sensor = feature.startsWith('as7341') ? 'AS7341' : feature.startsWith('tcs34725') ? 'TCS34725' : 'VL53L1X';
+        const values = liveRawSamples.map((sample) => Number(sample[feature as keyof RawSensorSample])).filter(Number.isFinite);
+        return { feature, sensor, metrics, current: values.at(-1) ?? null, values };
+      }).filter((row) => sensorFilter === 'ALL' || (sensorFilter === 'OUTLIER' ? row.metrics.outlierCount > 0 : row.sensor === sensorFilter))
+        .sort((first, second) => sensorSort === 'cv'
+          ? (second.metrics.coefficientOfVariation ?? -1) - (first.metrics.coefficientOfVariation ?? -1)
+          : sensorSort === 'outlier'
+          ? second.metrics.outlierCount - first.metrics.outlierCount
+          : first.feature.localeCompare(second.feature))
+    : [];
+  const outlierFeature = patternMetrics ? Object.entries(patternMetrics.channels).find(([, metrics]) => metrics.outlierCount > 0)?.[0] : null;
+  const correlationPair = patternMetrics?.crossSensorPair;
+  const correlationFirst = correlationPair ? liveRawSamples.map((sample) => Number(sample[correlationPair.first as keyof RawSensorSample])).filter(Number.isFinite) : [];
+  const correlationSecond = correlationPair ? liveRawSamples.map((sample) => Number(sample[correlationPair.second as keyof RawSensorSample])).filter(Number.isFinite) : [];
+  const trendValues = patternMetrics?.trendChannel ? liveRawSamples.map((sample) => Number(sample[patternMetrics.trendChannel as keyof RawSensorSample])).filter(Number.isFinite) : [];
+  const bestAblation = ABLATION_STUDY_DATA.reduce((best, row) => row[ablationMetric] > best[ablationMetric] ? row : best, ABLATION_STUDY_DATA[0]);
+
   // Processing lifecycle stages
   const mStatus = liveMeasurement?.status;
   const lifecycleStages = [
@@ -508,7 +570,7 @@ export default function AnalyticsPage() {
             IoT Monitoring & SVM Intelligence
           </h1>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Live ESP32-S3 sensor telemetry, SVM classification inference, model evaluation, and research analytics.
+            Software-only measurement simulation, SVM classification inference, model evaluation, and research analytics.
           </p>
         </div>
 
@@ -528,14 +590,14 @@ export default function AnalyticsPage() {
 
           {/* Device status */}
           <div className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold flex items-center gap-1.5 shadow-2xs ${
-            deviceStats && deviceStats.online > 0
+            liveMeasurement?.data_source === 'iot_real' && deviceStats && deviceStats.online > 0
               ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-              : deviceStats && deviceStats.measuring > 0
+              : liveMeasurement?.data_source === 'iot_real' && deviceStats && deviceStats.measuring > 0
               ? 'bg-blue-50 border-blue-200 text-blue-700'
               : 'bg-slate-50 border-slate-200 text-slate-500'
           }`}>
             <Cpu className="w-3 h-3" />
-            {deviceStats
+            {liveMeasurement?.data_source === 'iot_real' && deviceStats
               ? deviceStats.online > 0
                 ? `${deviceStats.online} ESP32 ONLINE`
                 : deviceStats.measuring > 0
@@ -571,6 +633,24 @@ export default function AnalyticsPage() {
 
       {error && <ErrorBanner message={error} />}
 
+      <div className="glass-panel p-4 rounded-2xl border border-white/85 shadow-sm">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {['Pengukuran Multi-Sensor', 'Pengambilan 20 Sampel', 'Pemeriksaan Kualitas Data', 'Pengolahan Fitur', 'Pembentukan 15 Fitur', 'Klasifikasi SVM', 'Pembentukan Profil Assessment', 'Insight Assessment', 'Laporan Assessment'].map((step, index) => (
+            <button key={step} type="button" onClick={() => { const target = index >= 1 && index <= 4 ? 'sensor-summary' : index === 5 ? 'live-prediction' : index === 7 ? 'pattern-analysis' : index === 8 ? 'profile-assessment' : 'pattern-analysis'; document.getElementById(target)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} className="shrink-0 flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 hover:border-slate-500 text-left cursor-pointer">
+              <span className="w-5 h-5 rounded-full bg-slate-950 text-white text-[10px] font-bold flex items-center justify-center">{index + 1}</span><span className="text-[10px] font-semibold text-slate-700">{step}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div id="profile-assessment" className="glass-panel p-5 rounded-2xl border border-amber-200/80 bg-amber-50/60 shadow-sm">
+        <button type="button" onClick={() => setProfileOpen(!profileOpen)} className="w-full flex items-center justify-between text-left cursor-pointer">
+          <div><h3 className="text-sm font-bold text-slate-950">{liveAssessment?.assessment.mapping_available ? 'Human Phenotype Assessment' : 'Interpretasi Profil - Belum Tersedia'}</h3><p className="text-xs text-slate-600 mt-1">{liveAssessment?.assessment.mapping_available ? liveAssessment.assessment.mapping_label : 'Menunggu mapping metodologi resmi'}</p></div>
+          <span className="text-[10px] font-bold text-amber-700">{profileOpen ? 'Tutup' : 'Buka'}</span>
+        </button>
+        {profileOpen && (liveAssessment?.assessment.mapping_available ? <div className="mt-4 space-y-3"><p className="text-xl font-black text-slate-950">{liveAssessment.assessment.classification_profile}</p><p className="text-xs leading-relaxed text-slate-600">{liveAssessment.assessment.classification_description}</p>{liveAssessment.assessment.mapping_mode === 'demo' && <p className="text-[11px] font-semibold text-amber-700">DEMO ONLY - bukan ground truth penelitian</p>}<div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{liveAssessment.assessment.dimensions.map((dimension) => <div key={dimension.name} className="p-3 rounded-xl bg-white border border-amber-200"><p className="text-xs font-bold text-slate-900">{dimension.name}</p><p className="text-[11px] text-emerald-700 mt-1">{dimension.score}/100 · {dimension.level}</p></div>)}</div></div> : <p className="text-xs leading-relaxed text-slate-600 mt-4">Profil, karakteristik, potensi kekuatan, area pengembangan, dan saran belum dapat ditampilkan karena mapping assessment resmi belum tersedia. Class A/B/C tetap ditampilkan sebagai hasil klasifikasi ML, bukan interpretasi manusia.</p>)}
+      </div>
+
       {/* ======================================================== */}
       {/* SECTION 1 — LIVE IoT MONITORING                          */}
       {/* ======================================================== */}
@@ -580,8 +660,8 @@ export default function AnalyticsPage() {
             <Activity className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">Live IoT Monitoring</h2>
-            <p className="text-[10.5px] text-slate-400">Latest completed measurement from the backend</p>
+            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">Stored Measurement Monitoring</h2>
+            <p className="text-[10.5px] text-slate-400">Latest completed measurement from the backend (software-only simulation)</p>
           </div>
           <span className="ml-auto text-[10px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 uppercase">
             Auto-refresh 30s
@@ -700,7 +780,7 @@ export default function AnalyticsPage() {
             <Microscope className="w-3.5 h-3.5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">Real-Time Sensor Monitoring</h2>
+            <h2 className="text-sm font-bold text-slate-950 uppercase tracking-wider">Stored Sensor Samples</h2>
             <p className="text-[10.5px] text-slate-400">
               {liveRawSamples.length > 0
                 ? `Sample trends across ${liveRawSamples.length} samples from the latest measurement`
@@ -883,6 +963,43 @@ export default function AnalyticsPage() {
       </div>
 
       {/* ======================================================== */}
+      {/* INTERACTIVE PATTERN ANALYSIS                            */}
+      <div id="pattern-analysis" className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-200/60 pb-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-950">Analisis Pola Pengukuran</h3>
+            <p className="text-xs text-slate-500 mt-1">Metrics berasal dari raw samples yang sama dengan PDF.</p>
+          </div>
+          <span className="text-[10px] font-bold text-slate-500">{liveRawSamples.length} samples</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          {[
+            { key: 'cv' as const, label: 'CV rata-rata', value: patternMetrics?.averageCv != null ? `${patternMetrics.averageCv.toFixed(2)}%` : 'Tidak tersedia' },
+            { key: 'outlier' as const, label: 'Jumlah outlier', value: patternMetrics ? String(patternMetrics.averageOutlierCount) : 'Tidak tersedia' },
+            { key: 'correlation' as const, label: 'Korelasi terkuat', value: correlationPair ? `${correlationPair.correlation.toFixed(3)}` : 'Tidak tersedia' },
+            { key: 'trend' as const, label: 'Trend', value: patternMetrics?.trendChannel || 'Tidak ditemukan' },
+          ].map((card) => (
+            <button key={card.key} type="button" onClick={() => setPatternView(patternView === card.key ? null : card.key)} className={`text-left p-4 rounded-2xl border transition-all cursor-pointer ${patternView === card.key ? 'bg-slate-950 text-white border-slate-950' : 'bg-white/70 border-slate-200 hover:border-slate-400'}`}>
+              <div className={`text-[10px] uppercase font-bold ${patternView === card.key ? 'text-slate-300' : 'text-slate-400'}`}>{card.label}</div>
+              <div className="text-lg font-black mt-1">{card.value}</div>
+              <div className={`text-[10px] mt-1 ${patternView === card.key ? 'text-slate-300' : 'text-slate-500'}`}>Klik untuk detail</div>
+            </button>
+          ))}
+        </div>
+        {patternView === 'cv' && <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200"><div className="text-xs font-bold text-slate-900 mb-2">CV per 15 fitur</div><div className="space-y-2">{patternRows.map((row) => <div key={row.feature} className="flex items-center gap-3 text-[11px]"><span className="w-40 truncate text-slate-600">{row.feature}</span><div className="h-2 flex-1 bg-slate-200 rounded-full overflow-hidden"><div className="h-full bg-slate-900 rounded-full" style={{ width: `${Math.min(100, row.metrics.coefficientOfVariation ?? 0) * 5}%` }} /></div><span className="w-14 text-right font-mono">{row.metrics.coefficientOfVariation?.toFixed(2) ?? '—'}%</span></div>)}</div></div>}
+        {patternView === 'outlier' && <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200"><div className="text-xs font-bold text-slate-900 mb-2">Sample outlier detail</div><div className="text-[11px] text-slate-500 mb-2">Feature: {outlierFeature || 'Tidak ditemukan'}</div><SampleLineChart data={outlierFeature ? liveRawSamples.map((sample) => Number(sample[outlierFeature as keyof RawSensorSample])) : []} outliers={outlierFeature && patternMetrics ? liveRawSamples.map((sample, index) => { const value = Number(sample[outlierFeature as keyof RawSensorSample]); const metric = patternMetrics.channels[outlierFeature]; return Math.abs((value - metric.mean) / (metric.standardDeviation || 1)) > 2 ? index : -1; }).filter((index) => index >= 0) : []} color="#e11d48" /></div>}
+        {patternView === 'correlation' && <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200"><div className="text-xs font-bold text-slate-900 mb-2">{correlationPair ? `${correlationPair.first} vs ${correlationPair.second} (r=${correlationPair.correlation.toFixed(3)})` : 'Korelasi tidak tersedia'}</div><ScatterChart first={correlationFirst} second={correlationSecond} /></div>}
+        {patternView === 'trend' && <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200"><div className="text-xs font-bold text-slate-900 mb-2">{patternMetrics?.trendChannel || 'Tidak ada trend signifikan'}</div><SampleLineChart data={trendValues} color="#0f766e" /><div className="text-[11px] text-slate-500">Slope: {patternMetrics?.trendSlope?.toFixed(4) ?? '—'} · R-squared: {patternMetrics?.trendRSquared?.toFixed(3) ?? '—'}</div></div>}
+      </div>
+
+      {/* ======================================================== */}
+      {/* SENSOR EVIDENCE TABLE                                    */}
+      <div id="sensor-summary" className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/85 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="text-base font-bold text-slate-950">Ringkasan Sensor</h3><div className="flex gap-2"><select value={sensorFilter} onChange={(event) => setSensorFilter(event.target.value as typeof sensorFilter)} className="text-xs rounded-full border border-slate-200 px-3 py-1.5 bg-white"><option value="ALL">Semua</option><option value="AS7341">AS7341</option><option value="TCS34725">TCS34725</option><option value="VL53L1X">VL53L1X</option><option value="OUTLIER">Memiliki Outlier</option></select><select value={sensorSort} onChange={(event) => setSensorSort(event.target.value as typeof sensorSort)} className="text-xs rounded-full border border-slate-200 px-3 py-1.5 bg-white"><option value="feature">Sort feature</option><option value="cv">Sort CV</option><option value="outlier">Sort outlier</option></select></div></div>
+        <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-slate-400 border-b border-slate-200"><th className="py-2">Sensor</th><th>Feature</th><th>Current</th><th>Mean</th><th>Std</th><th>CV</th><th>Outlier</th></tr></thead><tbody>{patternRows.map((row) => <tr key={row.feature} className={`border-b border-slate-100 ${row.metrics.outlierCount > 0 ? 'bg-rose-50/70' : ''}`}><td className="py-2 font-semibold">{row.sensor}</td><td>{row.feature}</td><td>{row.current?.toFixed(2) ?? '—'}</td><td>{row.metrics.mean.toFixed(2)}</td><td>{row.metrics.standardDeviation.toFixed(2)}</td><td>{row.metrics.coefficientOfVariation?.toFixed(2) ?? '—'}%</td><td className={row.metrics.outlierCount > 0 ? 'font-bold text-rose-700' : 'text-slate-500'}>{row.metrics.outlierCount}</td></tr>)}</tbody></table></div>
+      </div>
+
+      {/* ======================================================== */}
       {/* SECTION 3 — SENSOR HEALTH                               */}
       {/* ======================================================== */}
       <div className="glass-panel p-6 rounded-3xl border border-white/85 shadow-sm space-y-4">
@@ -970,7 +1087,7 @@ export default function AnalyticsPage() {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-950">IoT → ML Processing Pipeline</h3>
-              <p className="text-xs text-slate-500">End-to-end flow from ESP32-S3 hardware to SVM prediction</p>
+              <p className="text-xs text-slate-500">End-to-end flow from sensor data acquisition (simulation) to SVM prediction</p>
             </div>
           </div>
           <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 self-start sm:self-auto">
@@ -1050,7 +1167,7 @@ export default function AnalyticsPage() {
       {/* ======================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Latest ML Prediction (7 cols) */}
-        <div className="lg:col-span-7 glass-panel p-6 sm:p-7 rounded-3xl border border-white/85 shadow-sm space-y-5">
+        <div id="live-prediction" className="lg:col-span-7 glass-panel p-6 sm:p-7 rounded-3xl border border-white/85 shadow-sm space-y-5">
           <div className="flex items-center justify-between border-b border-slate-200/60 pb-3.5">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
@@ -1625,9 +1742,9 @@ export default function AnalyticsPage() {
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-slate-950">{row.config}</span>
                     <span className="text-[10.5px] text-slate-400 font-mono">({row.nFeat} features)</span>
-                    {row.isBestF1 && (
+                    {row.config === bestAblation.config && (
                       <span className="px-2 py-0.2 rounded-full text-[9.5px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                        Top Ablation F1
+                        Best {ablationMetric === 'macroF1' ? 'Macro F1' : 'Accuracy'}
                       </span>
                     )}
                     {row.isStandard && (
@@ -1823,18 +1940,18 @@ export default function AnalyticsPage() {
               <div className="w-7 h-7 rounded-full bg-slate-950 text-white flex items-center justify-center">
                 <PieChart className="w-3.5 h-3.5" />
               </div>
-              <h3 className="text-base font-bold text-slate-950">Live Prediction Analytics</h3>
+              <h3 className="text-base font-bold text-slate-950">Prediction Analytics</h3>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Measurement records from active IoT and synthetic acquisitions stored in Supabase.
+              Measurement records from synthetic/simulation acquisitions stored in Supabase.
             </p>
           </div>
           <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 uppercase self-start sm:self-auto shadow-2xs">
-            LIVE API DATA
+            STORED API DATA
           </span>
         </div>
 
-        {/* Live Metrics Row */}
+        {/* Stored Metrics Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {loading ? (
             <>
@@ -1858,39 +1975,39 @@ export default function AnalyticsPage() {
 
               <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1">
                 <div className="text-slate-400 text-[10.5px] font-semibold flex items-center justify-between uppercase">
-                  <span>Live Class A</span>
+                  <span>Class A Records</span>
                   <span className="w-2 h-2 rounded-full bg-slate-400" />
                 </div>
                 <div className="text-2xl font-black text-slate-950">{classA}</div>
-                <div className="text-[10.5px] text-slate-500">{pctA}% of total live records</div>
+                <div className="text-[10.5px] text-slate-500">{pctA}% of total records</div>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1">
                 <div className="text-slate-400 text-[10.5px] font-semibold flex items-center justify-between uppercase">
-                  <span>Live Class B</span>
+                  <span>Class B Records</span>
                   <span className="w-2 h-2 rounded-full bg-slate-500" />
                 </div>
                 <div className="text-2xl font-black text-slate-950">{classB}</div>
-                <div className="text-[10.5px] text-slate-500">{pctB}% of total live records</div>
+                <div className="text-[10.5px] text-slate-500">{pctB}% of total records</div>
               </div>
 
               <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/70 space-y-1">
                 <div className="text-slate-400 text-[10.5px] font-semibold flex items-center justify-between uppercase">
-                  <span>Live Class C</span>
+                  <span>Class C Records</span>
                   <span className="w-2 h-2 rounded-full bg-slate-950" />
                 </div>
                 <div className="text-2xl font-black text-slate-950">{classC}</div>
-                <div className="text-[10.5px] text-slate-500">{pctC}% of total live records</div>
+                <div className="text-[10.5px] text-slate-500">{pctC}% of total records</div>
               </div>
             </>
           )}
         </div>
 
-        {/* Live Distribution Bar */}
+        {/* Stored Distribution Bar */}
         {totalClassifications > 0 ? (
           <div className="space-y-2 pt-2">
             <div className="flex justify-between text-xs text-slate-700 font-medium">
-              <span>Live Class Ratio</span>
+              <span>Class Ratio (stored records)</span>
               <span>{totalClassifications} Total Records</span>
             </div>
             <div className="h-2.5 w-full bg-slate-200/70 rounded-full overflow-hidden flex">
@@ -1901,7 +2018,7 @@ export default function AnalyticsPage() {
           </div>
         ) : (
           <div className="py-3 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl">
-            No live predictions recorded yet. Measurements created in the console will appear here in real-time.
+            No stored predictions recorded yet. Measurements created in the console will appear here.
           </div>
         )}
 
@@ -1923,7 +2040,7 @@ export default function AnalyticsPage() {
                 <div className="text-[10px] text-slate-500">{pctSynth}%</div>
               </div>
               <div className="p-2.5 rounded-xl bg-blue-50/70 border border-blue-200">
-                <div className="text-blue-600 text-[10px] font-medium">IOT REAL (ESP32)</div>
+                <div className="text-blue-600 text-[10px] font-medium">IOT REAL (device)</div>
                 <div className="text-lg font-bold text-blue-950 mt-0.5">{sourceStats?.iot_real ?? 0}</div>
                 <div className="text-[10px] text-blue-600">{pctReal}%</div>
               </div>

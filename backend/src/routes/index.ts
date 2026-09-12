@@ -7,6 +7,7 @@ import measurementRoutes from './measurementRoutes';
 import mlRoutes from './mlRoutes';
 import analyticsRoutes from './analyticsRoutes';
 import auditLogRoutes from './auditLogRoutes';
+import assessmentRoutes from './assessmentRoutes';
 
 const router = Router();
 
@@ -18,6 +19,7 @@ router.use('/measurements', measurementRoutes);
 router.use('/ml', mlRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/audit-logs', auditLogRoutes);
+router.use('/assessments', assessmentRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

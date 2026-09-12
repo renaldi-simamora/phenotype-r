@@ -62,7 +62,7 @@ export default function DashboardPage() {
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">Dashboard</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Monitor your IoT measurement node and review real-time classification results.
+            Review measurement records and model classification results (software-only simulation).
           </p>
         </div>
 
@@ -100,12 +100,10 @@ export default function DashboardPage() {
                 <span className="text-2xl font-extrabold text-slate-950 tracking-tight">
                   {primaryDevice?.device_code || 'ESP32-S3'}
                 </span>
-                <StatusBadge status={primaryDevice?.status || 'OFFLINE'} size="sm" />
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600">HARDWARE PENDING</span>
               </div>
               <div className="text-xs text-slate-500">
-                {primaryDevice?.status === 'ONLINE'
-                  ? `Last seen: ${primaryDevice.last_seen ? formatTime(primaryDevice.last_seen) : 'Active now'}`
-                  : 'Hardware Integration Pending'}
+                Software-only / simulation mode. Real device heartbeat is not configured.
               </div>
             </div>
 
@@ -347,7 +345,7 @@ export default function DashboardPage() {
         ) : recentMeasurements.length === 0 ? (
           <EmptyState
             title="No measurement records found"
-            description="Start a new measurement session using the button above or triggering the physical button on the ESP32 node."
+            description="Start a new measurement session using the button above. Physical button trigger is planned hardware integration (pending)."
             actionText="Start Measurement"
             actionHref="/measurement"
           />

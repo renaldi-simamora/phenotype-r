@@ -1,6 +1,8 @@
 import { supabaseAdmin } from '../config/supabase';
 import { MlModelRepository } from '../repositories/mlModelRepository';
 import { MlPredictionRepository } from '../repositories/mlPredictionRepository';
+import { RawSampleRepository } from '../repositories/rawSampleRepository';
+import { calculatePatterns } from './measurementPdfService';
 
 export class AnalyticsService {
   static async getMeasurementStats() {
@@ -100,5 +102,14 @@ export class AnalyticsService {
 
   static async getModelPerformance() {
     return MlModelRepository.findAll();
+  }
+
+  static async getPatternMetrics(measurementId: string) {
+    const samples = await RawSampleRepository.findByMeasurementId(measurementId);
+    return {
+      measurement_id: measurementId,
+      sample_count: samples.length,
+      metrics: calculatePatterns(samples),
+    };
   }
 }

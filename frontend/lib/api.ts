@@ -1,4 +1,4 @@
-import { ApiResponse, User, Device, Measurement, MlPrediction, MlModel, SensorReading, RawSensorSample } from '../types';
+import { ApiResponse, User, Device, Measurement, MlPrediction, MlModel, SensorReading, RawSensorSample, AssessmentResult, PatternMetrics } from '../types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -290,6 +290,8 @@ class ApiClient {
         `raw_samples_${measurementId || 'all'}_${Date.now()}.csv`
       );
     },
+    downloadPdf: (measurementId: string) =>
+      this.downloadFile(`/measurements/${measurementId}/export/pdf`, `measurement-${measurementId}.pdf`),
   };
 
   // ML endpoints
@@ -298,6 +300,11 @@ class ApiClient {
       this.request<MlPrediction>(`/ml/predictions/${measurementId}`),
     getModels: () => this.request<MlModel[]>('/ml/models'),
     getModelById: (id: string) => this.request<MlModel>(`/ml/models/${id}`),
+  };
+
+  assessments = {
+    getByMeasurementId: (measurementId: string) =>
+      this.request<AssessmentResult>(`/assessments/${measurementId}`),
   };
 
   // Analytics endpoints
@@ -318,6 +325,8 @@ class ApiClient {
       this.request<{ total: number; online: number; measuring: number; offline: number }>('/analytics/devices'),
     getModelPerformance: () =>
       this.request<MlModel[]>('/analytics/model-performance'),
+    getPatternMetrics: (measurementId: string) =>
+      this.request<{ measurement_id: string; sample_count: number; metrics: PatternMetrics }>(`/analytics/patterns/${measurementId}`),
     /** Fetches the latest completed measurement + its raw samples + prediction */
     getLatestLiveMeasurement: async (): Promise<{
       measurement: Measurement | null;

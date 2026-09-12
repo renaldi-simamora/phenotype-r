@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   PlayCircle,
   Cpu,
-  Radio,
   Gauge,
   CheckCircle2,
   RotateCcw,
@@ -14,10 +13,13 @@ import {
   Layers,
   History,
   Download,
+  ChevronDown,
+  Info,
+  GitBranch,
 } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { useAuth } from '../../../context/AuthContext';
-import { Device, Measurement, MlPrediction, DataSource } from '../../../types';
+import { AssessmentResult, Device, Measurement, MlPrediction, DataSource } from '../../../types';
 import { StatusBadge } from '../../../components/StatusBadge';
 import { ErrorBanner } from '../../../components/ErrorBanner';
 
@@ -42,6 +44,11 @@ export default function MeasurementPage() {
   const [distanceMm, setDistanceMm] = useState(42.5);
   const [currentMeasurement, setCurrentMeasurement] = useState<Measurement | null>(null);
   const [prediction, setPrediction] = useState<MlPrediction | null>(null);
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
+  const [openSection, setOpenSection] = useState<'meaning' | 'pipeline' | 'technical' | null>('meaning');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [pdfExportError, setPdfExportError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -191,6 +198,17 @@ export default function MeasurementPage() {
           if (procRes.data.predictionResult) {
             setPrediction(procRes.data.predictionResult as MlPrediction);
           }
+          if (procRes.data.measurement?.id) {
+            setAssessmentLoading(true);
+            try {
+              const assessmentRes = await api.assessments.getByMeasurementId(procRes.data.measurement.id);
+              if (assessmentRes.success) setAssessment(assessmentRes.data);
+            } catch {
+              setAssessment(null);
+            } finally {
+              setAssessmentLoading(false);
+            }
+          }
         } else {
           throw new Error(procRes.message || 'Failed to process sensor measurement in backend');
         }
@@ -217,7 +235,23 @@ export default function MeasurementPage() {
     setElapsedTime(0);
     setCurrentMeasurement(null);
     setPrediction(null);
+    setAssessment(null);
+    setOpenSection('meaning');
+    setPdfExportError(null);
     setError(null);
+  };
+
+  const handleExportPdf = async () => {
+    if (!currentMeasurement?.id) return;
+    try {
+      setExportingPdf(true);
+      setPdfExportError(null);
+      await api.measurements.downloadPdf(currentMeasurement.id);
+    } catch (exportError) {
+      setPdfExportError(exportError instanceof Error ? exportError.message : 'Gagal mengekspor PDF');
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId) || devices[0];
@@ -279,16 +313,9 @@ export default function MeasurementPage() {
               >
                 Synthetic
               </button>
-              <button
-                onClick={() => setDataSource('iot_real')}
-                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-all ${
-                  dataSource === 'iot_real'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                IoT Real
-              </button>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700">
+                Hardware pending
+              </span>
             </div>
           ) : (
             <span
@@ -454,6 +481,114 @@ export default function MeasurementPage() {
             </div>
           </div>
 
+          {/* Interpretation and provenance */}
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={() => setOpenSection(openSection === 'meaning' ? null : 'meaning')}
+              className="w-full flex items-center justify-between p-5 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-left cursor-pointer"
+            >
+              <span className="flex items-center gap-3">
+                <Info className="w-5 h-5 text-amber-700" />
+                <span>
+                  <span className="block text-sm font-bold text-slate-950">Research Classification Mapping</span>
+                  <span className="block text-xs text-slate-600 mt-1">Simulated interpretation of the identified SVM class.</span>
+                </span>
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${openSection === 'meaning' ? 'rotate-180' : ''}`} />
+            </button>
+            {openSection === 'meaning' && (
+              <div className="p-5 rounded-2xl border border-slate-200/70 bg-white/70 space-y-3">
+                {assessmentLoading ? (
+                  <div className="h-5 w-64 bg-slate-200 rounded animate-pulse" />
+                ) : assessment?.assessment.mapping_available ? (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Research Profile (Simulation)</p>
+                      <p className="text-2xl font-black text-slate-950 mt-1">{assessment.assessment.classification_profile || 'Belum tersedia'}</p>
+                      <p className="text-xs leading-relaxed text-slate-600 mt-2">{assessment.assessment.classification_description || 'Belum tersedia'}</p>
+                      <p className="text-[11px] font-semibold text-amber-700 mt-2">{assessment.assessment.mapping_mode === 'demo' ? 'SIMULATION ONLY - not an official assessment' : `Mapping ${assessment.assessment.mapping_version}`}</p>
+                    </div>
+                    {assessment.assessment.dimensions.length > 0 && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{assessment.assessment.dimensions.map((dimension) => <div key={dimension.name} className="p-3 rounded-xl bg-slate-50 border border-slate-200"><p className="text-xs font-bold text-slate-900">{dimension.name}</p><p className="text-[11px] text-emerald-700 font-semibold mt-1">{dimension.score}/100 · {dimension.level}</p></div>)}</div>}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {assessment.assessment.characteristics.map((item) => (
+                        <div key={item.title} className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                          <p className="text-sm font-bold text-slate-900">{item.title}</p>
+                          {item.level && <p className="text-[11px] text-emerald-700 font-semibold mt-1">{item.level}</p>}
+                          <p className="text-xs text-slate-600 mt-1">{item.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500">Mapping {assessment.assessment.mapping_version} · Acquisition Version {assessment.assessment.assessment_version}</p>
+                  </div>
+                ) : assessment?.assessment.status === 'MAPPING_NOT_CONFIGURED' || assessment?.assessment.status === 'UNKNOWN_CLASS' ? (
+                  <>
+                    <p className="text-sm font-semibold text-slate-900">Research mapping not configured for this class.</p>
+                    <p className="text-xs leading-relaxed text-slate-600">
+                      Characteristics and research profiles are not displayed without an established methodology mapping. PHENOTYPE functions as a data acquisition platform.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-600">Classification mapping unavailable. Please complete a measurement session.</p>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setOpenSection(openSection === 'pipeline' ? null : 'pipeline')}
+              className="w-full flex items-center justify-between p-5 rounded-2xl bg-white/70 border border-slate-200/70 text-left cursor-pointer"
+            >
+              <span className="flex items-center gap-3">
+                <GitBranch className="w-5 h-5 text-slate-700" />
+                <span>
+                  <span className="block text-sm font-bold text-slate-950">Why this result?</span>
+                  <span className="block text-xs text-slate-500 mt-1">A transparent view of the processing path.</span>
+                </span>
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${openSection === 'pipeline' ? 'rotate-180' : ''}`} />
+            </button>
+            {openSection === 'pipeline' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 p-5 rounded-2xl border border-slate-200/70 bg-white/50">
+                {[
+                  ['01', 'Measurement', `${currentMeasurement?.sample_count || 20} samples captured`],
+                  ['02', 'Features', '15 sensor features aggregated'],
+                  ['03', 'SVM', prediction?.model_version || 'Model version unavailable'],
+                  ['04', 'Assessment', assessment?.assessment.status === 'MAPPING_NOT_CONFIGURED' ? 'Mapping not configured' : 'Awaiting result'],
+                ].map(([number, title, detail]) => (
+                  <div key={number} className="p-4 border-l-2 border-slate-300">
+                    <div className="text-[10px] font-bold tracking-widest text-slate-400">{number}</div>
+                    <div className="text-sm font-bold text-slate-900 mt-2">{title}</div>
+                    <div className="text-xs text-slate-500 mt-1">{detail}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setOpenSection(openSection === 'technical' ? null : 'technical')}
+              className="w-full flex items-center justify-between p-5 rounded-2xl bg-white/70 border border-slate-200/70 text-left cursor-pointer"
+            >
+              <span className="flex items-center gap-3">
+                <Layers className="w-5 h-5 text-slate-700" />
+                <span>
+                  <span className="block text-sm font-bold text-slate-950">Technical details</span>
+                  <span className="block text-xs text-slate-500 mt-1">Raw and model metadata remain available without dominating the result.</span>
+                </span>
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform ${openSection === 'technical' ? 'rotate-180' : ''}`} />
+            </button>
+            {openSection === 'technical' && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 rounded-2xl border border-slate-200/70 bg-white/50 text-xs">
+                <div><span className="block text-slate-400">Measurement ID</span><span className="block mt-1 font-semibold text-slate-900 break-all">{currentMeasurement?.id || 'Unavailable'}</span></div>
+                <div><span className="block text-slate-400">Samples</span><span className="block mt-1 font-semibold text-slate-900">{currentMeasurement?.sample_count || 20}</span></div>
+                <div><span className="block text-slate-400">Quality</span><span className="block mt-1 font-semibold text-slate-900">{currentMeasurement?.quality || 'Unavailable'}</span></div>
+                <div><span className="block text-slate-400">Source</span><span className="block mt-1 font-semibold text-slate-900">{currentMeasurement?.data_source === 'iot_real' ? 'IoT real' : 'Synthetic simulation'}</span></div>
+              </div>
+            )}
+          </div>
+
           {/* Probabilities Breakdown */}
           {prediction?.probabilities && (
             <div className="p-6 rounded-2xl bg-white/60 border border-slate-200/70 space-y-4">
@@ -497,6 +632,17 @@ export default function MeasurementPage() {
               Data successfully logged. 20 raw samples available for CSV export.
             </span>
             <div className="flex items-center gap-2">
+              {pdfExportError && <span className="text-rose-600">{pdfExportError}</span>}
+              {currentMeasurement?.id && (
+                <button
+                  onClick={handleExportPdf}
+                  disabled={exportingPdf}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-950 hover:bg-slate-800 text-white font-semibold shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>{exportingPdf ? 'Exporting PDF...' : 'Export PDF'}</span>
+                </button>
+              )}
               {currentMeasurement?.id && (
                 <button
                   onClick={() => api.measurements.downloadRawSamplesCsv(currentMeasurement.id)}

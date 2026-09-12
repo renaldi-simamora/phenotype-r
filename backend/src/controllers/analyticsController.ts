@@ -48,4 +48,13 @@ export class AnalyticsController {
       next(error);
     }
   }
+
+  static async getPatternMetrics(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const metrics = await AnalyticsService.getPatternMetrics(req.params.measurementId);
+      sendSuccess(res, 'Pattern metrics fetched', metrics);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

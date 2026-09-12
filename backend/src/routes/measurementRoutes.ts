@@ -15,6 +15,7 @@ router.get('/export/raw-csv', MeasurementController.exportRawSamples);
 
 router.post('/', authorize('ADMIN', 'OPERATOR', 'USER'), validate(createMeasurementSchema), MeasurementController.create);
 router.get('/', MeasurementController.getAll);
+router.get('/:id/export/pdf', MeasurementController.exportPdf);
 router.get('/:id', MeasurementController.getById);
 router.get('/:id/raw-samples', MeasurementController.getRawSamples);
 router.patch('/:id/status', authorize('ADMIN', 'OPERATOR'), validate(updateMeasurementStatusSchema), MeasurementController.updateStatus);

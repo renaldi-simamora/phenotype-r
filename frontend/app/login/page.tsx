@@ -93,7 +93,7 @@ export default function LoginPage() {
             Sign in to Console
           </h2>
           <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
-            Enter your credentials or use your Google account to access system telemetry.
+            Enter your credentials or use your Google account to access the measurement platform.
           </p>
         </div>
 

@@ -44,14 +44,14 @@ export default function SettingsPage() {
         <div>
           <h2 className="text-3xl font-extrabold tracking-tight text-slate-950">System Settings</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Configure operator account details, measurement thresholds, and hardware telemetry.
+            Configure operator account details and measurement thresholds. Hardware configuration is planned and not yet active.
           </p>
         </div>
 
         {savedSuccess && (
           <div className="flex items-center gap-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-full shadow-2xs">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Settings saved successfully</span>
+            <span>Settings saved locally (not persisted to a backend)</span>
           </div>
         )}
       </div>
@@ -225,6 +225,9 @@ export default function SettingsPage() {
       {activeTab === 'device' && (
         <form onSubmit={handleSave} className="glass-panel p-8 rounded-3xl border border-white/85 shadow-sm space-y-6 text-xs">
           <h3 className="text-sm font-bold text-slate-950">ESP32-S3 Hardware Configuration</h3>
+          <div className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl px-3.5 py-2">
+            Planned / Not Active / Hardware Integration Pending — these values are not applied to physical hardware and are not persisted to a backend.
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-1.5">
@@ -237,7 +240,7 @@ export default function SettingsPage() {
                 onChange={(e) => setHeartbeatInterval(parseInt(e.target.value, 10))}
                 className="w-full px-4 py-2.5 rounded-2xl bg-white/80 border border-slate-200/80 text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white shadow-2xs"
               />
-              <p className="text-[11px] text-slate-500">Frequency of device alive pings to backend API</p>
+              <p className="text-[11px] text-slate-500">Planned frequency of device alive pings to backend API (not active).</p>
             </div>
 
             <div className="space-y-3 pt-2">
@@ -260,7 +263,7 @@ export default function SettingsPage() {
               className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-semibold text-white bg-slate-950 hover:bg-slate-800 rounded-full transition-all shadow-sm hover:scale-[1.01] active:scale-[0.99] cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Save Node Config</span>
+              <span>Save Planned Config (local only)</span>
             </button>
           </div>
         </form>

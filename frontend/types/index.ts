@@ -5,6 +5,10 @@ export type MeasurementStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCE
 export type DataSource = 'synthetic' | 'iot_real';
 export type MeasurementQuality = 'GOOD' | 'WARNING' | 'POOR';
 
+// Class_A/Class_B/Class_C are synthetic research/simulation labels only.
+// They carry no biological, personality, STIFIn, or assessment meaning.
+export type LabelSemantics = 'synthetic_research_labels';
+
 export interface User {
   id: string;
   auth_user_id: string;
@@ -114,8 +118,74 @@ export interface MlPrediction {
     Class_C?: number;
     [key: string]: number | undefined;
   };
+  label_semantics?: LabelSemantics;
   processing_time_ms: number;
   created_at: string;
+}
+
+export interface AssessmentResult {
+  measurement: {
+    id: string;
+    sample_count: number;
+    quality: MeasurementQuality;
+    data_source: DataSource;
+  };
+  prediction: {
+    model_name: string;
+    model_version: string;
+    predicted_class: string;
+    confidence: number;
+    probabilities: MlPrediction['probabilities'] | null;
+  } | null;
+  assessment: {
+    status: 'MAPPED' | 'MAPPING_NOT_CONFIGURED' | 'UNKNOWN_CLASS' | 'PREDICTION_NOT_AVAILABLE';
+    mapping_available: boolean;
+    mapping_version: string;
+    assessment_version: string;
+    mapping_mode: 'official' | 'demo';
+    mapping_label: string;
+    classification_profile: string | null;
+    classification_description: string | null;
+    dimensions: AssessmentDimension[];
+    characteristics: AssessmentContentItem[];
+    strengths: AssessmentContentItem[];
+    developmentAreas: AssessmentContentItem[];
+    recommendations: AssessmentContentItem[];
+  };
+}
+
+export interface AssessmentContentItem {
+  title: string;
+  description: string;
+  level?: string;
+}
+
+export interface AssessmentDimension {
+  name: string;
+  score: number;
+  level: string;
+  description: string;
+}
+
+export interface PatternChannelMetrics {
+  mean: number;
+  standardDeviation: number;
+  coefficientOfVariation: number | null;
+  slope: number | null;
+  rSquared: number | null;
+  outlierCount: number;
+}
+
+export interface PatternMetrics {
+  channels: Record<string, PatternChannelMetrics>;
+  averageCv: number | null;
+  averageOutlierCount: number;
+  trendChannel: string | null;
+  trendSlope: number | null;
+  trendRSquared: number | null;
+  crossSensorPair: { first: string; second: string; correlation: number } | null;
+  motionEvidence: boolean;
+  available: boolean;
 }
 
 export interface Measurement {

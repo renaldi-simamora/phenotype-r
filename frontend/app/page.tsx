@@ -438,14 +438,14 @@ export default function LandingPage() {
               ref={headlineRef}
               className="text-4xl sm:text-6xl lg:text-[68px] font-extrabold tracking-tight leading-[1.05] text-slate-950"
             >
-              Revolutionizing <br />
-              Phenotype <br />
-              Identification
+              Next-Gen <br />
+              Multi-Sensor <br />
+              Scanner Platform
             </h1>
 
             {/* Subtext */}
             <p ref={subtextRef} className="text-sm sm:text-base text-slate-600 max-w-[50ch] leading-relaxed">
-              Real-time multi-sensor data acquisition powered by ESP32-S3 and an integrated Support Vector Machine pipeline for scientific characteristic classification.
+              Precision multi-sensor data acquisition powered by ESP32-S3 and an integrated SVM pipeline for robust biometric feature classification.
             </p>
 
             {/* Dual Pill Action Buttons */}
@@ -643,7 +643,10 @@ export default function LandingPage() {
               <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center">
                 <CheckCircle2 className="w-3.5 h-3.5" />
               </div>
-              <div className="font-bold text-slate-900">80.0% Model Accuracy</div>
+              <div>
+                <div className="font-bold text-slate-900">80.0% Model Accuracy</div>
+                <div className="text-[10px] text-slate-500">on synthetic research dataset</div>
+              </div>
             </div>
           </div>
         </div>
@@ -845,7 +848,7 @@ export default function LandingPage() {
               Multi-Sensor Fusion & Intelligent Alignment
             </h2>
             <p className="text-sm text-slate-600 leading-relaxed">
-              PHENOTYPE fuses spectral optical channels, chromatic coordinate vectors, and laser distance telemetry to eliminate spatial positioning errors.
+              PHENOTYPE is designed to fuse spectral optical channels, chromatic coordinate vectors, and laser distance readings to reduce spatial positioning errors. Hardware integration is pending; current data is simulation-based.
             </p>
 
             <div className="space-y-4">
@@ -859,7 +862,7 @@ export default function LandingPage() {
                 <div>
                   <h4 className="text-sm font-bold text-slate-950">Guided Distance Validation</h4>
                   <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                    Sampling will not initiate unless the target is within the optimal 35 to 50 mm focal distance.
+                    Planned: sampling will not initiate unless the target is within the optimal 35 to 50 mm focal distance. Hardware integration pending.
                   </p>
                 </div>
               </div>
@@ -874,7 +877,7 @@ export default function LandingPage() {
                 <div>
                   <h4 className="text-sm font-bold text-slate-950">Dual Trigger Control</h4>
                   <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                    Initiate measurements either by pressing the physical button on the ESP32 enclosure or via the web console.
+                    Planned: initiate measurements either by pressing the physical button on the ESP32 enclosure or via the web console. Hardware integration pending.
                   </p>
                 </div>
               </div>
@@ -901,10 +904,10 @@ export default function LandingPage() {
             <div className="flex items-center justify-between border-b border-slate-200/60 pb-4">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-bold text-slate-950">Live Classification Telemetry</span>
+                <span className="text-xs font-bold text-slate-950">Simulated Classification Preview</span>
               </div>
-              <span className="text-xs text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200 font-semibold shadow-2xs">
-                Active Node
+              <span className="text-xs text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200 font-semibold shadow-2xs">
+                Simulation Only
               </span>
             </div>
 
@@ -952,7 +955,7 @@ export default function LandingPage() {
 
                 <div>
                   <div className="flex justify-between text-slate-950 text-[11px] mb-1 font-bold">
-                    <span>Class C (Identified)</span>
+                    <span>Class C (classification output)</span>
                     <span ref={confValCRef}>0.00%</span>
                   </div>
                   <div className="h-2 w-full bg-slate-200/70 rounded-full overflow-hidden">
