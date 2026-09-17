@@ -5,41 +5,93 @@
 
 ---
 
+## Quick Start
+
+For experienced developers who want to run the platform locally right away:
+
+| Service | Directory | Command | Local URL | Port |
+|---|---|---|---|:---:|
+| **ML Inference Service** | `ml/` | `python api.py` | `http://127.0.0.1:5000` | `5000` |
+| **Backend REST API** | `backend/` | `npm run dev` | `http://localhost:8000` | `8000` |
+| **Frontend Web App** | `frontend/` | `npm run dev` | `http://localhost:3000` | `3000` |
+
+```bash
+# 1. Clone repository
+git clone https://github.com/renaldi-simamora/phenotype-r.git
+cd phenotype-r
+
+# 2. Setup database: Run backend/supabase_schema.sql in your Supabase SQL Editor
+
+# 3. Terminal 1 (ML Service)
+cd ml
+python -m venv .venv
+# Windows: .venv\Scripts\Activate.ps1 | Linux/macOS: source .venv/bin/activate
+pip install -r requirements.txt
+python api.py
+
+# 4. Terminal 2 (Backend API)
+cd backend
+npm install
+# Windows: Copy-Item .env.example .env | Linux/macOS: cp .env.example .env
+# Edit backend/.env with your Supabase credentials and JWT_SECRET
+npm run dev
+
+# 5. Terminal 3 (Frontend App)
+cd frontend
+npm install
+# Windows: Copy-Item .env.example .env.local | Linux/macOS: cp .env.example .env.local
+npm run dev
+
+# 6. Open browser at http://localhost:3000
+```
+
+---
+
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
 2. [Current Project Status](#current-project-status)
 3. [Research Scope & Boundaries](#research-scope--boundaries)
-4. [System Architecture](#system-architecture)
-5. [End-to-End Data Flow](#end-to-end-data-flow)
-6. [Technology Stack](#technology-stack)
-7. [Multi-Sensor Feature Vector](#multi-sensor-feature-vector)
-8. [Machine Learning Pipeline](#machine-learning-pipeline)
-   - [Dataset Specifications](#dataset-specifications)
-   - [Data Leakage Prevention & Validation Strategy](#data-leakage-prevention--validation-strategy)
-   - [Model Architecture & Hyperparameter Tuning](#model-architecture--hyperparameter-tuning)
-   - [Evaluation Metrics & Benchmark Results](#evaluation-metrics--benchmark-results)
-   - [Sensor Ablation Study](#sensor-ablation-study)
-   - [Feature Permutation Importance](#feature-permutation-importance)
-   - [Python ML Inference Service (FastAPI)](#python-ml-inference-service-fastapi)
-9. [Measurement Lifecycle & Quality Rating](#measurement-lifecycle--quality-rating)
-10. [Backend Architecture & Implementation](#backend-architecture--implementation)
+4. [Getting Started (Onboarding Guide)](#getting-started-onboarding-guide)
+   - [Clone Repository](#1-clone-repository)
+   - [Opening in VS Code](#2-opening-in-vs-code)
+   - [Opening in Google Antigravity](#3-opening-in-google-antigravity)
+   - [Prerequisites](#4-prerequisites)
+   - [Database Setup (Supabase)](#5-database-setup-supabase)
+   - [Environment Variables Setup](#6-environment-variables-setup)
+   - [Running the Application (3 Terminals)](#7-running-the-application)
+5. [End-to-End User Guide (How to Use)](#end-to-end-user-guide-how-to-use)
+6. [System Architecture](#system-architecture)
+7. [End-to-End Data Flow](#end-to-end-data-flow)
+8. [Technology Stack](#technology-stack)
+9. [Multi-Sensor Feature Vector](#multi-sensor-feature-vector)
+10. [Machine Learning Pipeline](#machine-learning-pipeline)
+    - [Dataset Specifications](#dataset-specifications)
+    - [Data Leakage Prevention & Validation Strategy](#data-leakage-prevention--validation-strategy)
+    - [Model Architecture & Hyperparameter Tuning](#model-architecture--hyperparameter-tuning)
+    - [Evaluation Metrics & Benchmark Results](#evaluation-metrics--benchmark-results)
+    - [Sensor Ablation Study](#sensor-ablation-study)
+    - [Feature Permutation Importance](#feature-permutation-importance)
+    - [Python ML Inference Service (FastAPI)](#python-ml-inference-service-fastapi)
+11. [Measurement Lifecycle & Quality Rating](#measurement-lifecycle--quality-rating)
+12. [Backend Architecture & Implementation](#backend-architecture--implementation)
     - [Architecture Overview](#architecture-overview)
     - [Security & Authentication](#security--authentication)
     - [PDF Reporting Service](#pdf-reporting-service)
-11. [Frontend Implementation (Next.js)](#frontend-implementation-nextjs)
+13. [Frontend Implementation (Next.js)](#frontend-implementation-nextjs)
     - [Implemented Pages & Workflows](#implemented-pages--workflows)
     - [State Management & API Communication](#state-management--api-communication)
-12. [Database Schema (Supabase / PostgreSQL)](#database-schema-supabase--postgresql)
-13. [Complete API Reference](#complete-api-reference)
-14. [Repository Structure](#repository-structure)
-15. [Environment Variables](#environment-variables)
-16. [Installation & Local Setup](#installation--local-setup)
+14. [Database Schema (Supabase / PostgreSQL)](#database-schema-supabase--postgresql)
+15. [Complete API Reference](#complete-api-reference)
+16. [Project Structure](#project-structure)
 17. [Testing & Quality Verification](#testing--quality-verification)
-18. [Current Limitations](#current-limitations)
-19. [Hardware Integration Roadmap](#hardware-integration-roadmap)
-20. [Academic & Research Disclaimer](#academic--research-disclaimer)
-21. [Author & License](#author--license)
+18. [Troubleshooting](#troubleshooting)
+19. [Development & Git Workflow](#development--git-workflow)
+20. [Updating the Repository](#updating-the-repository)
+21. [Current Limitations](#current-limitations)
+22. [Hardware Integration Roadmap](#hardware-integration-roadmap)
+23. [Academic & Research Disclaimer](#academic--research-disclaimer)
+24. [Author & License](#author--license)
 
 ---
 
@@ -95,6 +147,280 @@ To preserve scientific and academic rigor, the following research boundaries are
 3. **No Biological / Genetic Scanning:** Optical and distance sensors do not read DNA, chromosomes, or biological genotypes.
 4. **No Medical Claims:** PHENOTYPE is an engineering prototype and research system; it is not a diagnostic tool or clinical medical device.
 5. **Pending External STIFIn Contract:** While intended to explore replacement possibilities for legacy biometric scanners, the data exchange format, scanner output schema, and integration contract are owned by external third parties and are unconfigured in production.
+
+---
+
+## Getting Started (Onboarding Guide)
+
+Follow this step-by-step guide to clone, configure, run, and test the entire PHENOTYPE platform locally.
+
+### 1. Clone Repository
+
+Use the official GitHub repository URL:
+
+```bash
+git clone https://github.com/renaldi-simamora/phenotype-r.git
+cd phenotype-r
+```
+
+### 2. Opening in VS Code
+
+Launch VS Code directly from the project root:
+
+```bash
+code .
+```
+
+*Alternative if `code` command is not in your PATH:*
+1. Open Visual Studio Code.
+2. Go to **File $\rightarrow$ Open Folder...**
+3. Select the `phenotype-r` root folder.
+
+### 3. Opening in Google Antigravity
+
+1. Open Google Antigravity.
+2. Select **Open Folder** or open the repository workspace.
+3. Select the `phenotype-r` root directory.
+4. Verify that the three primary subdirectories (`frontend/`, `backend/`, and `ml/`) are visible in the workspace tree.
+
+### 4. Prerequisites
+
+Before starting, ensure you have the following installed on your machine:
+
+- **Git:** Latest version
+- **Node.js:** `v20.x` or `v22.x` LTS (recommended: `v22.x`)
+- **npm:** Included with Node.js (`v10.x` or higher)
+- **Python:** `Python 3.11` (strongly recommended for scikit-learn model compatibility; Python 3.11–3.14 compatible)
+- **pip & venv:** Python package manager and virtual environment module
+- **Supabase Account:** Free cloud tier account at [supabase.com](https://supabase.com) (or a local Supabase CLI instance)
+- **IDE:** Visual Studio Code or Google Antigravity
+
+---
+
+### 5. Database Setup (Supabase)
+
+1. **Log in to Supabase:** Go to [supabase.com](https://supabase.com) and create or open your project.
+2. **Open the SQL Editor:** In the Supabase Dashboard sidebar, click on **SQL Editor** $\rightarrow$ **New query**.
+3. **Execute the Core Schema:**
+   - Open [`backend/supabase_schema.sql`](file:///c:/Users/Renaldi/phenotype-r/backend/supabase_schema.sql) in your editor.
+   - Copy its entire content, paste it into the Supabase SQL Editor, and click **Run**.
+   - This creates all 8 required tables: `profiles`, `devices`, `measurements`, `raw_samples`, `sensor_readings`, `ml_predictions`, `ml_models`, and `audit_logs`.
+   - It also seeds an initial active ML model record (`SVM-v1.0`) and default device (`DEVICE-001`).
+4. **Note on Migrations:** If you already had an older database schema, [`backend/migration_update_v2.sql`](file:///c:/Users/Renaldi/phenotype-r/backend/migration_update_v2.sql) contains additive alter-table statements for column additions. If you just ran `supabase_schema.sql`, running the migration is not necessary as all columns are already created.
+5. **Retrieve API Credentials:**
+   - In Supabase Dashboard, navigate to **Project Settings $\rightarrow$ API**.
+   - Copy the following values:
+     - **Project URL** (e.g., `https://your-project.supabase.co`)
+     - **anon / public key**
+     - **service_role key** (Secret key required by the backend for admin access)
+   - Navigate to **Project Settings $\rightarrow$ Authentication** to retrieve your **JWT Secret**.
+
+---
+
+### 6. Environment Variables Setup
+
+#### Backend (`backend/.env`)
+
+Navigate to the `backend/` directory and copy the environment template:
+
+*Windows (PowerShell):*
+```powershell
+cd backend
+Copy-Item .env.example .env
+```
+
+*Linux / macOS:*
+```bash
+cd backend
+cp .env.example .env
+```
+
+Open `backend/.env` and fill in your Supabase credentials:
+
+```env
+PORT=8000
+NODE_ENV=development
+ASSESSMENT_MAPPING_MODE=official
+
+# Supabase API Settings
+SUPABASE_URL=https://your-project-id.supabase.co
+SUPABASE_ANON_KEY=your-anon-public-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Supabase JWT Secret (from Authentication Settings)
+JWT_SECRET=your-supabase-jwt-secret
+
+# Python ML Microservice (Server-to-Server)
+ML_SERVICE_URL=http://localhost:5000
+
+# CORS Allowed Origin
+CORS_ORIGIN=http://localhost:3000
+```
+
+> ⚠️ **Security Warning:** Never commit `backend/.env` or expose your `SUPABASE_SERVICE_ROLE_KEY` to public repositories.
+
+#### Frontend (`frontend/.env.local`)
+
+Navigate to the `frontend/` directory and copy the environment template:
+
+*Windows (PowerShell):*
+```powershell
+cd frontend
+Copy-Item .env.example .env.local
+```
+
+*Linux / macOS:*
+```bash
+cd frontend
+cp .env.example .env.local
+```
+
+Verify `frontend/.env.local`:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000/api
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key-here
+```
+
+#### ML Microservice (`ml/`)
+
+The Python ML service in `ml/api.py` does **not** strictly require a `.env` file for standard operation. By default, it runs on port `5000` (configurable via standard environment variable `PORT=5000`).
+
+---
+
+### 7. Running the Application
+
+To run the complete system in development mode, open **three separate terminals**:
+
+#### Terminal 1 — Python ML Service (Port 5000)
+
+```bash
+cd ml
+
+# 1. Create virtual environment (if not already created)
+python -m venv .venv
+
+# 2. Activate virtual environment
+# Windows (PowerShell):
+.venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source .venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. (OPTIONAL) Retrain pipeline and generate metrics
+# python run_pipeline.py  <-- ONLY run if you want to retrain. Pre-trained model is already present!
+
+# 5. Start FastAPI inference server
+python api.py
+```
+
+*Verify ML Health:* Open a browser or run:
+```bash
+curl http://127.0.0.1:5000/health
+```
+Expected output:
+```json
+{
+  "status": "ONLINE",
+  "service": "PhenoNode-ML-Service",
+  "model_loaded": true,
+  "feature_count": 15,
+  "features": ["AS7341_F1", "AS7341_F2", ...],
+  "label_semantics": "synthetic_research_labels"
+}
+```
+
+---
+
+#### Terminal 2 — Express.js Backend API (Port 8000)
+
+```bash
+cd backend
+
+# 1. Install Node.js dependencies
+npm install
+
+# 2. Start development server (ts-node-dev with hot-reload)
+npm run dev
+```
+
+*Verify Backend Health:* Open a browser or run:
+```bash
+curl http://localhost:8000/api/health
+```
+Expected output:
+```json
+{
+  "success": true,
+  "message": "PHENOTYPE API is healthy",
+  "data": {
+    "status": "UP",
+    "timestamp": "2026-09-17T...",
+    "uptime": 12.4
+  }
+}
+```
+
+---
+
+#### Terminal 3 — Next.js Frontend (Port 3000)
+
+```bash
+cd frontend
+
+# 1. Install frontend dependencies
+npm install
+
+# 2. Start Next.js development server
+npm run dev
+```
+
+*Open the Web Application:* Open your web browser at **`http://localhost:3000`**.
+
+---
+
+## End-to-End User Guide (How to Use)
+
+Once all three services are running, follow this operational workflow through the web interface:
+
+```text
+Open Browser at http://localhost:3000
+                  │
+                  ▼
+        Register a New Account (/register)
+        or Sign In (/login)
+                  │
+                  ▼
+       Dashboard Overview (/dashboard)
+       (View system stats, device status, recent sessions)
+                  │
+                  ▼
+       Execute New Measurement (/measurement)
+       1. Select Target Device ("DEVICE-001")
+       2. Set Data Source ("synthetic")
+       3. Click "Start Measurement"
+       4. Distance Validation (Simulates VL53L1X within 35-50 mm)
+       5. 20-Sample Acquisition (Simulates 20 readings across 15 channels)
+       6. Feature Aggregation (Mean vector computed by backend)
+       7. ML Inference (FastAPI evaluates SVM model)
+       8. View Results (Class_A, Class_B, or Class_C + Confidence & Probabilities)
+       9. Click "Export PDF Report" (Downloads 9-page technical report)
+                  │
+                  ▼
+       Review Measurement Records (/history)
+       (Search, filter by quality/source/class, inspect 20 raw samples, export CSV)
+                  │
+                  ▼
+       Analyze ML Benchmarks (/analytics)
+       (Inspect 80.0% accuracy, 500-sample confusion matrix, ablation charts)
+                  │
+                  ▼
+       Device Registry & Settings (/device, /settings)
+       (Inspect registered nodes; note hardware integration pending status)
+```
 
 ---
 
@@ -640,7 +966,7 @@ All backend endpoints are prefixed with `/api`. Authenticated endpoints require 
 | `/analytics/model-performance` | `GET` | Bearer | `ADMIN` | Model accuracy, F1, and confusion matrix summary |
 | `/analytics/patterns/:measurementId`| `GET` | Bearer | `ADMIN` | Stability, CV, slope, and cross-sensor correlations |
 | `/audit-logs` | `GET` | Bearer | `ADMIN` | Retrieve system audit logs |
-| `/assessments/:measurementId` | `GET` | Bearer | All | Retrieve research assessment mapping |
+| `/assessments/:measurementId` | `GET` | Bearer | All | Retrieve research assessment mapping (unconfigured in production) |
 | `/health` | `GET` | Public | All | Backend uptime and health check |
 
 ### Python ML Microservice Endpoints (Port 5000)
@@ -651,7 +977,18 @@ All backend endpoints are prefixed with `/api`. Authenticated endpoints require 
 
 ---
 
-## Repository Structure
+## Project Structure
+
+```text
+phenotype-r/
+├── frontend/                        # Next.js 16 Web Application (React 19, Tailwind CSS v4)
+├── backend/                         # Express.js REST API & PDFKit Reporting Engine
+├── ml/                              # Python SVM Machine Learning Training & Inference Service
+├── README.md                        # Primary project documentation
+└── .gitignore                       # Git exclusion rules
+```
+
+### Detailed Tree
 
 ```
 phenotype-r/
@@ -662,7 +999,7 @@ phenotype-r/
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── supabase_schema.sql          # Core 8-table relational schema
-│   ├── migration_update_v2.sql      # Schema migrations
+│   ├── migration_update_v2.sql      # Schema migrations (additive)
 │   └── src/
 │       ├── server.ts                # Application entry point & graceful shutdown
 │       ├── app.ts                   # Express configuration, helmet, cors, rate limiting
@@ -725,164 +1062,173 @@ phenotype-r/
 
 ---
 
-## Environment Variables
-
-### Backend (`backend/.env`)
-Template available at `backend/.env.example`:
-
-| Variable | Required | Default | Purpose |
-|---|:---:|---|---|
-| `PORT` | No | `8000` | HTTP port for the Express backend server |
-| `NODE_ENV` | No | `development` | Environment mode (`development` \| `production`) |
-| `ASSESSMENT_MAPPING_MODE` | No | `official` | Assessment profile mode (`official` unconfigured \| `demo`) |
-| `SUPABASE_URL` | **Yes** | — | Supabase project API URL (`https://xyz.supabase.co`) |
-| `SUPABASE_ANON_KEY` | No | — | Supabase public anonymous API key |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | — | Supabase service role key (required for administrative operations) |
-| `JWT_SECRET` | **Yes** | — | Secret string used to verify and sign application JWTs |
-| `ML_SERVICE_URL` | **Yes** | `http://localhost:5000` | Base URL of the Python FastAPI ML inference microservice |
-| `CORS_ORIGIN` | No | `http://localhost:3000` | Allowed client origin for CORS headers |
-
-### Frontend (`frontend/.env.local`)
-Template available at `frontend/.env.example`:
-
-| Variable | Required | Default | Purpose |
-|---|:---:|---|---|
-| `NEXT_PUBLIC_API_URL` | **Yes** | `http://localhost:8000/api` | Base URL of the Express backend REST API |
-| `NEXT_PUBLIC_SUPABASE_URL` | No | — | Supabase project URL for direct auth synchronization |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | — | Supabase public anonymous key |
-
-### ML Service (`ml/`)
-Configured through environment variables or CLI flags:
-
-| Variable | Required | Default | Purpose |
-|---|:---:|---|---|
-| `PORT` | No | `5000` | HTTP port for the FastAPI Uvicorn server |
-
----
-
-## Installation & Local Setup
-
-### Prerequisites
-- **Node.js:** v20.x or v22.x LTS and `npm`
-- **Python:** Python 3.11 or 3.14 with `venv` and `pip`
-- **Database:** Supabase project with `backend/supabase_schema.sql` executed
-
----
-
-### Step 1: Database Setup
-1. Open your Supabase Dashboard $\rightarrow$ **SQL Editor**.
-2. Paste and run the contents of [`backend/supabase_schema.sql`](file:///c:/Users/Renaldi/phenotype-r/backend/supabase_schema.sql).
-3. Retrieve your Project URL, Anon Key, and Service Role Key from **Project Settings $\rightarrow$ API**.
-
----
-
-### Step 2: Python ML Service Setup
-Open a terminal in the `ml/` directory:
-
-```bash
-cd ml
-
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment
-# Windows (PowerShell):
-.venv\Scripts\Activate.ps1
-# Linux/macOS:
-# source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# (Optional) Retrain pipeline and verify artifacts
-python run_pipeline.py
-
-# Start ML FastAPI inference service
-python api.py
-```
-The ML service will start at `http://127.0.0.1:5000`. Verify with `curl http://127.0.0.1:5000/health`.
-
----
-
-### Step 3: Backend Setup
-Open a new terminal in the `backend/` directory:
-
-```bash
-cd backend
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env and supply your SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and JWT_SECRET
-
-# Run TypeScript type check
-npm run lint
-
-# Start backend development server
-npm run dev
-```
-The backend API will start at `http://localhost:8000`. Verify with `curl http://localhost:8000/api/health`.
-
----
-
-### Step 4: Frontend Setup
-Open a third terminal in the `frontend/` directory:
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env.local
-
-# Start Next.js development server
-npm run dev
-```
-The frontend web application will start at `http://localhost:3000`.
-
----
-
 ## Testing & Quality Verification
 
-All three subsystems contain verified automated test suites and linting routines:
+All three subsystems contain automated test suites and validation routines based on verified repository commands:
 
-### Backend Tests
-```bash
-cd backend
+### 1. Machine Learning Unit Tests
+The Python test suite verifies dataset validation, feature schemas, inference handling, and model pipeline integrity:
 
-# Run TypeScript strict type-checking
-npm run lint
-
-# Build and execute Node.js test suite
-npm test
-```
-*Result:* 6/6 tests passing (verifies unconfigured production assessment mapping, isolation of research classes, and absence of fabricated metadata).
-
-### Machine Learning Unit Tests
 ```bash
 cd ml
 
-# Activate virtual environment
+# Windows PowerShell:
 .venv\Scripts\Activate.ps1
+# Linux / macOS:
+# source .venv/bin/activate
 
-# Run pytest suite
+# Execute pytest suite
 pytest tests/ -q
 ```
-*Result:* 39/39 passing unit tests covering dataset validation, feature extraction schemas, prediction outputs, and model serialization.
+*Current Repository Status:* **39 passed** unit tests.
 
-### Frontend Quality Check
+### 2. Backend TypeScript & Integration Tests
+The backend test suite executes TypeScript static analysis and the Node.js test runner:
+
+```bash
+cd backend
+
+# Run strict TypeScript compiler verification (no emit)
+npm run lint
+
+# Compile TypeScript and run service unit tests
+npm test
+```
+*Current Repository Status:* **6 passed** tests verifying unconfigured official mapping, class isolation, and safe fallback handling.
+
+### 3. Frontend Lint & Build Checks
+The frontend verification scripts ensure component integrity and Next.js Turbopack build compilation:
+
 ```bash
 cd frontend
 
-# Run ESLint validation
+# Run ESLint check
 npm run lint
 
 # Test production build compilation
 npm run build
+```
+
+---
+
+## Troubleshooting
+
+### 1. Port Conflicts (Port 5000, 8000, or 3000 Already in Use)
+
+If a service fails to start due to `EADDRINUSE`:
+
+*Windows PowerShell:*
+```powershell
+# Identify process using port (example: port 8000)
+Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | Select-Object -Property OwningProcess
+
+# Terminate process by PID (replace 12345 with actual PID)
+Stop-Process -Id 12345 -Force
+
+# One-liner to free port 8000:
+Get-Process -Id (Get-NetTCPConnection -LocalPort 8000).OwningProcess | Stop-Process -Force
+```
+
+*Linux / macOS:*
+```bash
+# Find and terminate process on port 8000
+lsof -ti:8000 | xargs kill -9
+```
+
+### 2. PowerShell Script Execution Policy (`Activate.ps1` Cannot be Loaded)
+
+If Windows PowerShell blocks script execution when activating `.venv`:
+
+```powershell
+# Temporarily allow script execution for the current PowerShell window only (safe)
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+
+# Re-run activation
+.venv\Scripts\Activate.ps1
+```
+
+### 3. ML Model Version or Scikit-Learn Mismatch
+
+If you encounter warnings or deserialization errors when loading `models/svm_final_pipeline.joblib`:
+- Ensure you are running **Python 3.11** in your virtual environment.
+- Verify scikit-learn version matches `requirements.txt`:
+  ```bash
+  pip install -r requirements.txt
+  ```
+- *Note:* Do not immediately retrain the model; the included `models/svm_final_pipeline.joblib` and `models/metadata.json` are validated artifacts.
+
+### 4. Supabase Connection or Authentication Failures
+
+If the backend reports `Missing required environment variables` or 500 database errors:
+1. Verify `backend/.env` exists and contains non-empty `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `JWT_SECRET`.
+2. Ensure your IP address is not blocked by Supabase project network restrictions.
+3. Confirm you executed `backend/supabase_schema.sql` completely in the Supabase SQL Editor.
+4. Verify that `JWT_SECRET` in `backend/.env` matches the secret under **Supabase Dashboard $\rightarrow$ Project Settings $\rightarrow$ Authentication $\rightarrow$ JWT Secret**.
+
+---
+
+## Development & Git Workflow
+
+When developing or contributing to PHENOTYPE, follow this structured workflow:
+
+```text
+git pull origin main
+       │
+       ▼
+Open IDE (VS Code / Antigravity)
+       │
+       ▼
+Check Environment Files (.env, .env.local)
+       │
+       ▼
+Start Services (Terminal 1: ML | Terminal 2: Backend | Terminal 3: Frontend)
+       │
+       ▼
+Make Changes & Verify Tests (npm test, pytest)
+       │
+       ▼
+Inspect Changes:
+git status
+git diff
+       │
+       ▼
+Stage Specific Files (DO NOT use "git add ."):
+git add backend/src/services/measurementService.ts
+       │
+       ▼
+Commit & Push:
+git commit -m "feat(backend): description of changes"
+git push origin <branch-name>
+```
+
+### Git Security Rules
+- **Never use `git add .` as a default:** Always inspect staged files with `git status`.
+- **Never commit `.env` or `.env.local`:** These files contain database service role keys and secrets. They are ignored by `.gitignore`.
+- **Never commit virtual environments (`.venv/`) or `node_modules/`:** Keep local runtime packages unversioned.
+- **Model Artifacts:** Pre-trained model artifacts (`models/svm_final_pipeline.joblib`, `models/metadata.json`) are tracked for immediate inference availability. Do not commit temporary experiment checkpoints.
+
+---
+
+## Updating the Repository
+
+When pulling new updates from GitHub:
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Update ML dependencies if requirements.txt changed:
+cd ml
+.venv\Scripts\Activate.ps1   # or source .venv/bin/activate
+pip install -r requirements.txt
+
+# Update Backend dependencies if package.json changed:
+cd ../backend
+npm install
+
+# Update Frontend dependencies if package.json changed:
+cd ../frontend
+npm install
 ```
 
 ---
