@@ -358,10 +358,13 @@ export class MeasurementService {
 
   /**
    * Calculate aggregated 15 features (mean of 20 samples) and quality rating.
-   * Quality is based on VL53L1X distance stability:
-   * - standard deviation < 2.0 mm -> GOOD
-   * - standard deviation between 2.0 and 8.0 mm -> WARNING
-   * - standard deviation > 8.0 mm or distance <= 0 -> POOR
+   * Quality is derived from distance validity and measurement stability only;
+   * does not detect wet/dry/small finger or outdoor light.
+   * Uses only current sensor measurements: VL53L1X distance range (35-50 mm)
+   * and distance standard deviation across the 20 samples.
+   * - GOOD:    distance within 35-50 mm and std dev <= 2.0 mm
+   * - WARNING: distance outside 35-50 mm, or std dev between 2.0 and 8.0 mm
+   * - POOR:    distance <= 0 mm or std dev > 8.0 mm
    */
   public static calculateSummaryAndQuality(samples: RawSensorSample[]): {
     featureVector: number[];
@@ -454,10 +457,16 @@ export class MeasurementService {
     }
     const stdDev = Math.sqrt(variance / n);
 
+    // Quality is derived from distance validity and measurement stability only;
+    // does not detect wet/dry/small finger or outdoor light.
+    const MIN_VALID_DISTANCE_MM = 35;
+    const MAX_VALID_DISTANCE_MM = 50;
+    const distanceValid = avgDist >= MIN_VALID_DISTANCE_MM && avgDist <= MAX_VALID_DISTANCE_MM;
+
     let quality: MeasurementQuality = 'GOOD';
     if (avgDist <= 0 || stdDev > 8.0) {
       quality = 'POOR';
-    } else if (stdDev > 2.0) {
+    } else if (!distanceValid || stdDev > 2.0) {
       quality = 'WARNING';
     }
 

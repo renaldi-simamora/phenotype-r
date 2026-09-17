@@ -34,8 +34,8 @@ export const deviceAuth = async (
       throw Err.unauthorized('Device authentication failed: Device not found', 'DEVICE_UNAUTHORIZED');
     }
 
-    // Verify key if device has a key configured
-    if (device.device_key && deviceKeyHeader && device.device_key !== deviceKeyHeader) {
+    // Device yang punya device_key WAJIB menyertakan key yang cocok.
+    if (device.device_key && device.device_key !== deviceKeyHeader) {
       logger.warn(`Device authentication key mismatch for ID: ${deviceIdHeader}`);
       throw Err.unauthorized('Device authentication failed: Invalid device key', 'DEVICE_UNAUTHORIZED');
     }
